@@ -100,8 +100,12 @@ export class FirebaseSyncService {
   }
 
   /**
-   * Helper to get stable normalized Firestore document reference by username
+   * Helper to get stable normalized Firestore document reference for company data
    */
+  private static getCompanyDocRef() {
+    return doc(firestore, 'company_data', 'main');
+  }
+
   private static getAccountDocRef(username: string) {
     const key = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
     return doc(firestore, 'accounts', `u_${key}`, 'cloud_data', 'main');
@@ -111,21 +115,20 @@ export class FirebaseSyncService {
    * Attaches real-time Firestore listener to automatically update local state when changed on another device
    */
   private static attachRealtimeListener(username: string): void {
-    const key = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
-    if (this.currentAccountId === key && this.unsubscribeSnapshot) {
+    if (this.currentAccountId === 'company_main' && this.unsubscribeSnapshot) {
       return;
     }
 
     this.cleanupListener();
-    this.currentAccountId = key;
+    this.currentAccountId = 'company_main';
 
     try {
-      const docRef = this.getAccountDocRef(username);
+      const docRef = this.getCompanyDocRef();
       this.unsubscribeSnapshot = onSnapshot(
         docRef,
         async (snapshot) => {
           if (!snapshot.exists()) {
-            // First time this account is seen in Firestore
+            // First time Firestore company data is queried -> push local if available
             const localData = await this.collectLocalData();
             const hasLocalData =
               localData.employees.length > 0 ||
@@ -267,8 +270,16 @@ export class FirebaseSyncService {
     this.emitSyncState();
 
     try {
-      const docRef = this.getAccountDocRef(account.username);
-      const docSnap = await getDoc(docRef);
+      const companyDocRef = this.getCompanyDocRef();
+      const accountDocRef = this.getAccountDocRef(account.username);
+      
+      let docSnap = await getDoc(companyDocRef);
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(accountDocRef);
+      }
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(this.getAccountDocRef('admin'));
+      }
 
       let remoteDb: CloudDatabase;
       if (docSnap.exists()) {
@@ -355,7 +366,10 @@ export class FirebaseSyncService {
         settings: mergedSettings,
       };
 
-      await setDoc(docRef, updatedCloudDb);
+      await Promise.all([
+        setDoc(companyDocRef, updatedCloudDb),
+        setDoc(accountDocRef, updatedCloudDb),
+      ]);
 
       this.pendingChanges = 0;
       this.syncState.lastSyncAt = now;
@@ -416,17 +430,20 @@ export class FirebaseSyncService {
    */
   static async clearCloudDatabase(username?: string): Promise<void> {
     const account = AccountService.getActiveAccount();
-    const targetUsername = username || account?.username;
-    if (!targetUsername) return;
+    const targetUsername = username || account?.username || 'admin';
 
     try {
-      const docRef = this.getAccountDocRef(targetUsername);
+      const companyDocRef = this.getCompanyDocRef();
+      const accountDocRef = this.getAccountDocRef(targetUsername);
       const emptyDb = this.createDefaultCloudDatabase({
         accountId: account?.accountId || `sp_${targetUsername}`,
         username: targetUsername,
         companyName: account?.companyName || 'StaffPay Business',
       });
-      await setDoc(docRef, emptyDb);
+      await Promise.all([
+        setDoc(companyDocRef, emptyDb),
+        setDoc(accountDocRef, emptyDb),
+      ]);
       localStorage.setItem('staffpay_last_revision', '1');
       localStorage.setItem('staffpay_last_sync_at', new Date().toISOString());
       this.syncState.lastRemoteRevision = 1;

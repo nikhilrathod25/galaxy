@@ -214,6 +214,10 @@ export class AccountService {
         } else {
           throw new Error('Incorrect password. Please try again.');
         }
+      } else {
+        // Account does not exist in Cloud yet -> Auto-register it seamlessly
+        const newAccount = await this.createAccount(username, passwordInput, 'StaffPay Business');
+        return newAccount;
       }
     } catch (err: any) {
       if (err.message && err.message.includes('Incorrect password')) {
@@ -222,7 +226,7 @@ export class AccountService {
       console.warn('Cloud login check notice:', err);
     }
 
-    // 2. Fallback to local accounts list
+    // 2. Fallback to local accounts list or auto-create locally
     const accounts = this.getAccounts();
     const localAccount = accounts.find((a) => a.username.toLowerCase() === username);
 
@@ -230,24 +234,14 @@ export class AccountService {
       const computedHash = await this.hashPassword(passwordInput, localAccount.passwordSalt);
       if (computedHash === localAccount.passwordHash) {
         this.setActiveAccount(localAccount);
-        // Sync to cloud in background
-        setDoc(userDocRef, {
-          accountId: localAccount.accountId,
-          username: localAccount.username,
-          passwordHash: localAccount.passwordHash,
-          passwordSalt: localAccount.passwordSalt,
-          companyName: localAccount.companyName,
-          createdAt: localAccount.createdAt,
-          updatedAt: new Date().toISOString(),
-          status: 'active',
-        }).catch(() => {});
         return localAccount;
       } else {
         throw new Error('Incorrect password. Please try again.');
       }
     }
 
-    throw new Error(`Account "${username}" not found. Please click "Create Account" tab to register.`);
+    // Auto-create locally & on cloud
+    return await this.createAccount(username, passwordInput, 'StaffPay Business');
   }
 
   /**
