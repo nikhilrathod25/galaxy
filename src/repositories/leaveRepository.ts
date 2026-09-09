@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import { LeaveType, LeaveRecord } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class LeaveRepository {
   // Leave Types
@@ -14,19 +14,19 @@ export class LeaveRepository {
 
   static async createLeaveType(data: Omit<LeaveType, 'id'>): Promise<number> {
     const res = (await db.leave_types.add(data)) as number;
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async updateLeaveType(id: number, data: Partial<LeaveType>): Promise<number> {
     const res = await db.leave_types.update(id, data);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async deleteLeaveType(id: number): Promise<void> {
     await db.leave_types.delete(id);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   // Leave Records
@@ -50,19 +50,19 @@ export class LeaveRepository {
       ...data,
       createdAt: now,
     })) as number;
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async updateLeave(id: number, data: Partial<LeaveRecord>): Promise<number> {
     const res = await db.leaves.update(id, data);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async deleteLeave(id: number): Promise<void> {
     await db.leaves.delete(id);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async count(): Promise<number> {

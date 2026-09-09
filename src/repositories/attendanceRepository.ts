@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import { AttendanceRecord, AttendanceStatus } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class AttendanceRepository {
   /**
@@ -66,7 +66,7 @@ export class AttendanceRepository {
     if (status === 'Not Marked') {
       // If setting back to Not Marked, we can delete the record or update
       await db.attendance.delete(id);
-      CloudSyncService.notifyMutation();
+      FirebaseSyncService.notifyMutation();
       return id;
     }
 
@@ -79,7 +79,7 @@ export class AttendanceRepository {
       updatedAt: now,
     });
 
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return id;
   }
 
@@ -115,7 +115,7 @@ export class AttendanceRepository {
       }
     });
 
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async markAllPresentForDate(
@@ -147,7 +147,7 @@ export class AttendanceRepository {
 
     if (toPut.length > 0) {
       await db.attendance.bulkPut(toPut);
-      CloudSyncService.notifyMutation();
+      FirebaseSyncService.notifyMutation();
     }
 
     return {

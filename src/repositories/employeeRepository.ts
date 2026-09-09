@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import { Employee, EmployeeStatus } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class EmployeeRepository {
   static async getAll(status?: EmployeeStatus): Promise<Employee[]> {
@@ -47,7 +47,7 @@ export class EmployeeRepository {
       createdAt: now,
       updatedAt: now,
     });
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return id as number;
   }
 
@@ -57,13 +57,13 @@ export class EmployeeRepository {
       ...data,
       updatedAt: now,
     });
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async delete(id: number): Promise<void> {
     await db.employees.delete(id);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async count(): Promise<number> {

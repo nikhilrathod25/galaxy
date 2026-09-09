@@ -225,7 +225,7 @@ export class FirebaseSyncService {
     if (navigator.onLine && AccountService.getActiveAccount()) {
       this.debounceTimer = setTimeout(() => {
         this.sync();
-      }, 1500);
+      }, 200);
     }
   }
 

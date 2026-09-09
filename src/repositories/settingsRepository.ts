@@ -5,7 +5,7 @@ import {
   AppPreferences,
   AuthSettings,
 } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class SettingsRepository {
   static async get<T>(key: string, defaultValue: T): Promise<T> {
@@ -22,7 +22,7 @@ export class SettingsRepository {
       value,
       updatedAt: new Date().toISOString(),
     });
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async getCompanySettings(): Promise<CompanySettings> {

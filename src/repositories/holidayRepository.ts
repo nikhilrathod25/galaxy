@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import { Holiday } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class HolidayRepository {
   static async getAll(): Promise<Holiday[]> {
@@ -28,19 +28,19 @@ export class HolidayRepository {
       throw new Error(`Holiday on ${data.date} already exists (${existing.name}).`);
     }
     const id = (await db.holidays.add(data)) as number;
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return id;
   }
 
   static async update(id: number, data: Partial<Holiday>): Promise<number> {
     const res = await db.holidays.update(id, data);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return res;
   }
 
   static async delete(id: number): Promise<void> {
     await db.holidays.delete(id);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async count(): Promise<number> {

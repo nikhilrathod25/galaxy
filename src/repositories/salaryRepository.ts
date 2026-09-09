@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import { FinalizedSalaryRecord } from '../types';
-import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class SalaryRepository {
   static generateId(employeeId: string, year: number, month: number): string {
@@ -51,13 +51,13 @@ export class SalaryRepository {
       updatedAt: now,
     };
     await db.salary_records.put(toSave);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
     return toSave.id;
   }
 
   static async delete(id: string): Promise<void> {
     await db.salary_records.delete(id);
-    CloudSyncService.notifyMutation();
+    FirebaseSyncService.notifyMutation();
   }
 
   static async count(): Promise<number> {

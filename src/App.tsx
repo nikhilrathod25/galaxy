@@ -28,22 +28,16 @@ import { HolidaysPage } from './pages/HolidaysPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { BackupPage } from './pages/BackupPage';
 import { SettingsPage } from './pages/SettingsPage';
-
 import { MobileBottomNav } from './components/common/MobileBottomNav';
 
 // Protected layout wrapper
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasPin, setHasPin] = useState(false);
-  const [migrationState, setMigrationState] = useState<MigrationState>(CloudSyncService.getMigrationState());
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    const unsubMigration = CloudSyncService.subscribeMigration((state) => {
-      setMigrationState({ ...state });
-    });
-
     const checkAuth = async () => {
       // 1. StaffPay Account Authentication Check
       if (!AccountService.isAuthenticated()) {
@@ -51,12 +45,9 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         return;
       }
 
-      // 2. Initialize Cloud Sync for current Account
+      // 2. Initialize Silent Background Cloud Sync
       FirebaseSyncService.initialize().catch((err) => {
-        console.warn('Initial firebase sync notice:', err);
-      });
-      CloudSyncService.initialize().catch((err) => {
-        console.warn('Initial cloud sync notice:', err);
+        console.warn('Silent cloud sync notice:', err);
       });
 
       // 3. Local PIN Lock Check
@@ -69,10 +60,6 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     };
 
     checkAuth();
-
-    return () => {
-      unsubMigration();
-    };
   }, [location.pathname, navigate]);
 
   const handleLockApp = () => {
@@ -105,16 +92,6 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       {/* App-Style Mobile Bottom Navigation */}
       <MobileBottomNav onLockApp={handleLockApp} hasPin={hasPin} />
-
-      {/* Interactive First-Time Migration Modal (Case A & Case B) */}
-      {migrationState.isOpen && migrationState.type && (
-        <MigrationModal
-          type={migrationState.type}
-          onComplete={() => {
-            setMigrationState({ isOpen: false, type: null, pendingCloudDb: null });
-          }}
-        />
-      )}
     </div>
   );
 };

@@ -155,7 +155,7 @@ export const BackupPage: React.FC = () => {
       setImportResult(result);
       await loadMeta();
       // Trigger cloud sync to propagate imported data
-      CloudSyncService.notifyMutation();
+      FirebaseSyncService.notifyMutation();
       confetti({
         particleCount: 70,
         spread: 70,
