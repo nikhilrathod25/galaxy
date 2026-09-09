@@ -64,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-base font-black text-slate-900 tracking-tight flex items-center gap-1.5">
                 StaffPay
                 <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold border border-blue-200">
-                  Drive Sync
+                  Cloud Sync
                 </span>
               </span>
               <span className="text-[11px] block text-slate-500 font-medium leading-none">
@@ -128,10 +128,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="bg-white rounded-xl p-3 border border-slate-200/80 shadow-2xs">
             <div className="flex items-center gap-2 text-xs text-slate-800 font-bold mb-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-blue-700">Google Drive Central DB</span>
+              <span className="text-blue-700">Firebase Cloud Database</span>
             </div>
             <p className="text-[11px] text-slate-500 leading-tight font-medium">
-              Offline IndexedDB cache synchronized to Google Drive.
+              Real-time multi-device cloud synchronization.
             </p>
           </div>
         </div>

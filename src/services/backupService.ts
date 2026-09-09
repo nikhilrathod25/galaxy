@@ -389,7 +389,7 @@ export class BackupService {
   }
 
   /**
-   * Dangerous operation: Clear all local data with safety check
+   * Dangerous operation: Clear all local and cloud data with safety check
    */
   static async clearAllLocalData(): Promise<void> {
     await db.transaction(
@@ -405,11 +405,17 @@ export class BackupService {
       async () => {
         await db.employees.clear();
         await db.attendance.clear();
-        await db.leave_types.clear();
         await db.leaves.clear();
         await db.holidays.clear();
         await db.salary_records.clear();
       }
     );
+    try {
+      const { FirebaseSyncService } = await import('./firebaseSyncService');
+      await FirebaseSyncService.clearCloudDatabase();
+      window.dispatchEvent(new CustomEvent('staffpay_database_updated'));
+    } catch (e) {
+      console.warn('Could not reset cloud database during local wipe:', e);
+    }
   }
 }

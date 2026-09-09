@@ -410,6 +410,33 @@ export class FirebaseSyncService {
     return { employees, attendance, leaveTypes, leaves, holidays, salaryRecords, settings };
   }
 
+  /**
+   * Resets cloud database in Firestore to a clean empty state
+   */
+  static async clearCloudDatabase(username?: string): Promise<void> {
+    const account = AccountService.getActiveAccount();
+    const targetUsername = username || account?.username;
+    if (!targetUsername) return;
+
+    try {
+      const docRef = this.getAccountDocRef(targetUsername);
+      const emptyDb = this.createDefaultCloudDatabase({
+        accountId: account?.accountId || `sp_${targetUsername}`,
+        username: targetUsername,
+        companyName: account?.companyName || 'StaffPay Business',
+      });
+      await setDoc(docRef, emptyDb);
+      localStorage.setItem('staffpay_last_revision', '1');
+      localStorage.setItem('staffpay_last_sync_at', new Date().toISOString());
+      this.syncState.lastRemoteRevision = 1;
+      this.syncState.pendingCount = 0;
+      this.syncState.status = 'synced';
+      this.emitSyncState();
+    } catch (e) {
+      console.warn('Failed to clear cloud database:', e);
+    }
+  }
+
   private static createDefaultCloudDatabase(account: { accountId: string; username: string; companyName?: string }): CloudDatabase {
     const defaultSettings: AppSettingEntry[] = [
       {
