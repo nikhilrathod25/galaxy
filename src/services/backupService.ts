@@ -1,421 +1,258 @@
-import { db } from '../db/database';
+import { EmployeeService } from './employeeService';
+import { AttendanceService } from './attendanceService';
+import { LeaveService } from './leaveService';
+import { HolidayService } from './holidayService';
+import { SalaryService } from './salaryService';
+import { SettingsService } from './settingsService';
 import {
   BackupData,
-  BackupValidationResult,
-  ImportMode,
   ImportResult,
-  Employee,
-  AttendanceRecord,
-  LeaveType,
-  LeaveRecord,
-  Holiday,
-  FinalizedSalaryRecord,
-  AppSettingEntry,
-} from '../types';
-import { SettingsRepository } from '../repositories/settingsRepository';
+  ImportMode,
+  BackupValidationResult,
+} from '../types/backup';
 
 export class BackupService {
   /**
-   * Generates a complete database JSON export
+   * Validates a raw JSON backup string
    */
-  static async exportFullBackup(): Promise<BackupData> {
-    const employees = await db.employees.toArray();
-    const attendance = await db.attendance.toArray();
-    const leaveTypes = await db.leave_types.toArray();
-    const leaves = await db.leaves.toArray();
-    const holidays = await db.holidays.toArray();
-    const salaryRecords = await db.salary_records.toArray();
-    const settings = await db.settings.toArray();
+  static validateBackupJSON(jsonStr: string): BackupValidationResult {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed || typeof parsed !== 'object') {
+        return {
+          isValid: false,
+          errors: ['File content is not a valid JSON object.'],
+          warnings: [],
+        };
+      }
 
-    const now = new Date().toISOString();
+      const errors: string[] = [];
+      const warnings: string[] = [];
 
-    const backupData: BackupData = {
-      appName: 'StaffPay',
+      if (!Array.isArray(parsed.employees)) {
+        errors.push('Missing "employees" array in backup file.');
+      }
+      if (!Array.isArray(parsed.attendance)) {
+        errors.push('Missing "attendance" array in backup file.');
+      }
+
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        summary: {
+          backupVersion: parsed.backupVersion || '1.0',
+          exportedAt: parsed.exportedAt || new Date().toISOString(),
+          employeeCount: Array.isArray(parsed.employees) ? parsed.employees.length : 0,
+          attendanceCount: Array.isArray(parsed.attendance) ? parsed.attendance.length : 0,
+          leaveTypeCount: Array.isArray(parsed.leaveTypes) ? parsed.leaveTypes.length : 0,
+          leaveCount: Array.isArray(parsed.leaves) ? parsed.leaves.length : 0,
+          holidayCount: Array.isArray(parsed.holidays) ? parsed.holidays.length : 0,
+          salaryRecordCount: Array.isArray(parsed.salaryRecords) ? parsed.salaryRecords.length : 0,
+          settingsCount: Array.isArray(parsed.settings) ? parsed.settings.length : 0,
+        },
+      };
+    } catch (e: any) {
+      return {
+        isValid: false,
+        errors: ['Invalid JSON syntax: ' + (e.message || 'parse error')],
+        warnings: [],
+      };
+    }
+  }
+
+  /**
+   * Exports complete database from Supabase Cloud to JSON
+   */
+  static async exportBackup(): Promise<BackupData> {
+    const [employees, leaveTypes, leaves, holidays, salaryRecords, companySettings, salarySettings] =
+      await Promise.all([
+        EmployeeService.getAll(),
+        LeaveService.getAllLeaveTypes(),
+        LeaveService.getAllLeaves(),
+        HolidayService.getAll(),
+        SalaryService.getAll(),
+        SettingsService.getCompanySettings(),
+        SettingsService.getSalarySettings(),
+      ]);
+
+    const attendance = await AttendanceService.getByDateRange('2000-01-01', '2099-12-31');
+
+    const backup: BackupData = {
       backupVersion: '1.0',
       appVersion: '1.0.0',
-      databaseVersion: db.verno,
-      exportedAt: now,
+      databaseVersion: 2,
+      exportedAt: new Date().toISOString(),
+      appName: 'StaffPay',
       employees,
       attendance,
       leaveTypes,
       leaves,
       holidays,
       salaryRecords,
-      settings,
-    };
-
-    // Update backup meta timestamp
-    await SettingsRepository.updateBackupMeta({
-      lastBackupAt: now,
-    });
-
-    return backupData;
-  }
-
-  /**
-   * Downloads the backup as a timestamped JSON file
-   */
-  static downloadBackupFile(backupData: BackupData): void {
-    const dateStr = backupData.exportedAt.split('T')[0];
-    const filename = `staffpay-backup-${dateStr}.json`;
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }
-
-  /**
-   * Parses and validates uploaded backup JSON text
-   */
-  static validateBackupJSON(jsonString: string): BackupValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonString);
-    } catch (e: any) {
-      return {
-        isValid: false,
-        errors: [`Invalid JSON file format: ${e.message}`],
-        warnings: [],
-      };
-    }
-
-    if (!parsed || typeof parsed !== 'object') {
-      return {
-        isValid: false,
-        errors: ['The backup file does not contain a valid JSON object.'],
-        warnings: [],
-      };
-    }
-
-    // Version & App check
-    if (parsed.appName !== 'StaffPay' && !parsed.backupVersion) {
-      warnings.push('This file does not have the standard StaffPay header. Attempting to validate tables...');
-    }
-
-    // Required tables validation
-    const employees = Array.isArray(parsed.employees) ? parsed.employees : null;
-    const attendance = Array.isArray(parsed.attendance) ? parsed.attendance : null;
-    const leaveTypes = Array.isArray(parsed.leaveTypes) ? parsed.leaveTypes : (Array.isArray(parsed.leave_types) ? parsed.leave_types : []);
-    const leaves = Array.isArray(parsed.leaves) ? parsed.leaves : [];
-    const holidays = Array.isArray(parsed.holidays) ? parsed.holidays : [];
-    const salaryRecords = Array.isArray(parsed.salaryRecords) ? parsed.salaryRecords : (Array.isArray(parsed.salary_records) ? parsed.salary_records : []);
-    const settings = Array.isArray(parsed.settings) ? parsed.settings : [];
-
-    if (!employees) {
-      errors.push('Missing or invalid "employees" array in backup.');
-    } else {
-      for (let i = 0; i < employees.length; i++) {
-        const emp = employees[i];
-        if (!emp.employeeId || !emp.fullName) {
-          errors.push(`Employee at index ${i} is missing required employeeId or fullName.`);
-          break;
-        }
-      }
-    }
-
-    if (!attendance) {
-      errors.push('Missing or invalid "attendance" array in backup.');
-    } else {
-      for (let i = 0; i < Math.min(attendance.length, 50); i++) {
-        const att = attendance[i];
-        if (!att.employeeId || !att.date) {
-          errors.push(`Attendance record at index ${i} is missing employeeId or date.`);
-          break;
-        }
-      }
-    }
-
-    if (errors.length > 0) {
-      return {
-        isValid: false,
-        errors,
-        warnings,
-      };
-    }
-
-    return {
-      isValid: true,
-      errors: [],
-      warnings,
-      summary: {
-        backupVersion: parsed.backupVersion || '1.0',
-        exportedAt: parsed.exportedAt || new Date().toISOString(),
-        employeeCount: employees ? employees.length : 0,
-        attendanceCount: attendance ? attendance.length : 0,
-        leaveTypeCount: leaveTypes ? leaveTypes.length : 0,
-        leaveCount: leaves ? leaves.length : 0,
-        holidayCount: holidays ? holidays.length : 0,
-        salaryRecordCount: salaryRecords ? salaryRecords.length : 0,
-        settingsCount: settings ? settings.length : 0,
-      },
-    };
-  }
-
-  /**
-   * Imports validated backup data with Merge or Replace mode
-   */
-  static async importBackup(backupData: BackupData, mode: ImportMode): Promise<ImportResult> {
-    const importedCounts = {
-      employees: 0,
-      attendance: 0,
-      leaveTypes: 0,
-      leaves: 0,
-      holidays: 0,
-      salaryRecords: 0,
-      settings: 0,
-    };
-
-    const skippedCounts = {
-      employees: 0,
-      attendance: 0,
-      leaveTypes: 0,
-      leaves: 0,
-      holidays: 0,
-      salaryRecords: 0,
-    };
-
-    const employees = backupData.employees || [];
-    const attendance = backupData.attendance || [];
-    const leaveTypes = backupData.leaveTypes || (backupData as any).leave_types || [];
-    const leaves = backupData.leaves || [];
-    const holidays = backupData.holidays || [];
-    const salaryRecords = backupData.salaryRecords || (backupData as any).salary_records || [];
-    const settings = backupData.settings || [];
-
-    if (mode === 'replace') {
-      // Safe transactional wipe & re-populate
-      await db.transaction(
-        'rw',
-        [
-          db.employees,
-          db.attendance,
-          db.leave_types,
-          db.leaves,
-          db.holidays,
-          db.salary_records,
-          db.settings,
-        ],
-        async () => {
-          await db.employees.clear();
-          await db.attendance.clear();
-          await db.leave_types.clear();
-          await db.leaves.clear();
-          await db.holidays.clear();
-          await db.salary_records.clear();
-          await db.settings.clear();
-
-          if (employees.length > 0) {
-            // Strip autoincrement ID if needed or preserve
-            await db.employees.bulkAdd(employees);
-            importedCounts.employees = employees.length;
-          }
-          if (attendance.length > 0) {
-            // Ensure composite ID is present
-            const preparedAttendance = attendance.map(a => ({
-              ...a,
-              id: a.id || `${a.employeeId}_${a.date}`,
-            }));
-            await db.attendance.bulkAdd(preparedAttendance);
-            importedCounts.attendance = preparedAttendance.length;
-          }
-          if (leaveTypes.length > 0) {
-            await db.leave_types.bulkAdd(leaveTypes);
-            importedCounts.leaveTypes = leaveTypes.length;
-          }
-          if (leaves.length > 0) {
-            await db.leaves.bulkAdd(leaves);
-            importedCounts.leaves = leaves.length;
-          }
-          if (holidays.length > 0) {
-            await db.holidays.bulkAdd(holidays);
-            importedCounts.holidays = holidays.length;
-          }
-          if (salaryRecords.length > 0) {
-            const preparedSalary = salaryRecords.map(s => ({
-              ...s,
-              id: s.id || `${s.employeeId}_${s.year}_${String(s.month).padStart(2, '0')}`,
-            }));
-            await db.salary_records.bulkAdd(preparedSalary);
-            importedCounts.salaryRecords = preparedSalary.length;
-          }
-          if (settings.length > 0) {
-            await db.settings.bulkAdd(settings);
-            importedCounts.settings = settings.length;
-          }
-        }
-      );
-    } else {
-      // MERGE MODE (Default) - Safe duplicate-free upsert
-      await db.transaction(
-        'rw',
-        [
-          db.employees,
-          db.attendance,
-          db.leave_types,
-          db.leaves,
-          db.holidays,
-          db.salary_records,
-          db.settings,
-        ],
-        async () => {
-          // Merge Employees by employeeId
-          const existingEmployees = await db.employees.toArray();
-          const existingEmpMap = new Map(existingEmployees.map(e => [e.employeeId, e]));
-
-          for (const emp of employees) {
-            const existing = existingEmpMap.get(emp.employeeId);
-            if (existing && existing.id) {
-              await db.employees.update(existing.id, {
-                fullName: emp.fullName,
-                phone: emp.phone,
-                email: emp.email,
-                address: emp.address,
-                designation: emp.designation,
-                joiningDate: emp.joiningDate,
-                endDate: emp.endDate,
-                monthlySalary: emp.monthlySalary,
-                status: emp.status,
-                notes: emp.notes,
-                photoUrl: emp.photoUrl || existing.photoUrl,
-                updatedAt: emp.updatedAt || new Date().toISOString(),
-              });
-              importedCounts.employees++;
-            } else {
-              const { id, ...rest } = emp;
-              await db.employees.add({
-                ...rest,
-                createdAt: emp.createdAt || new Date().toISOString(),
-                updatedAt: emp.updatedAt || new Date().toISOString(),
-              });
-              importedCounts.employees++;
-            }
-          }
-
-          // Merge Attendance by composite key `${employeeId}_${date}`
-          const preparedAttendance: AttendanceRecord[] = [];
-          for (const att of attendance) {
-            const id = att.id || `${att.employeeId}_${att.date}`;
-            preparedAttendance.push({
-              ...att,
-              id,
-              updatedAt: att.updatedAt || new Date().toISOString(),
-            });
-          }
-          if (preparedAttendance.length > 0) {
-            await db.attendance.bulkPut(preparedAttendance);
-            importedCounts.attendance = preparedAttendance.length;
-          }
-
-          // Merge Holidays by date
-          const existingHolidays = await db.holidays.toArray();
-          const existingHolidayDates = new Set(existingHolidays.map(h => h.date));
-          const newHolidays: Holiday[] = [];
-          for (const h of holidays) {
-            if (existingHolidayDates.has(h.date)) {
-              skippedCounts.holidays++;
-            } else {
-              const { id, ...rest } = h;
-              newHolidays.push(rest as Holiday);
-              importedCounts.holidays++;
-            }
-          }
-          if (newHolidays.length > 0) {
-            await db.holidays.bulkAdd(newHolidays);
-          }
-
-          // Merge Leave Types by name
-          const existingTypes = await db.leave_types.toArray();
-          const existingTypeNames = new Set(existingTypes.map(t => t.name.toLowerCase()));
-          const newTypes: LeaveType[] = [];
-          for (const lt of leaveTypes) {
-            if (existingTypeNames.has(lt.name.toLowerCase())) {
-              skippedCounts.leaveTypes++;
-            } else {
-              const { id, ...rest } = lt;
-              newTypes.push(rest as LeaveType);
-              importedCounts.leaveTypes++;
-            }
-          }
-          if (newTypes.length > 0) {
-            await db.leave_types.bulkAdd(newTypes);
-          }
-
-          // Merge Salary Records by composite key `${employeeId}_${year}_${month}`
-          const preparedSalary: FinalizedSalaryRecord[] = [];
-          for (const s of salaryRecords) {
-            const id = s.id || `${s.employeeId}_${s.year}_${String(s.month).padStart(2, '0')}`;
-            preparedSalary.push({
-              ...s,
-              id,
-              updatedAt: s.updatedAt || new Date().toISOString(),
-            });
-          }
-          if (preparedSalary.length > 0) {
-            await db.salary_records.bulkPut(preparedSalary);
-            importedCounts.salaryRecords = preparedSalary.length;
-          }
-
-          // Merge Settings
-          if (settings.length > 0) {
-            await db.settings.bulkPut(settings);
-            importedCounts.settings = settings.length;
-          }
-        }
-      );
-    }
-
-    // Update last import timestamp
-    await SettingsRepository.updateBackupMeta({
-      lastImportAt: new Date().toISOString(),
-    });
-
-    return {
-      success: true,
-      mode,
-      importedCounts,
-      skippedCounts,
-      message: `Backup imported successfully (${mode === 'merge' ? 'Merged with existing data' : 'Replaced local database'}).`,
-    };
-  }
-
-  /**
-   * Dangerous operation: Clear all local and cloud data with safety check
-   */
-  static async clearAllLocalData(): Promise<void> {
-    await db.transaction(
-      'rw',
-      [
-        db.employees,
-        db.attendance,
-        db.leave_types,
-        db.leaves,
-        db.holidays,
-        db.salary_records,
+      settings: [
+        { key: 'company_info', value: companySettings, updatedAt: new Date().toISOString() },
+        { key: 'salary_settings', value: salarySettings, updatedAt: new Date().toISOString() },
       ],
-      async () => {
-        await db.employees.clear();
-        await db.attendance.clear();
-        await db.leaves.clear();
-        await db.holidays.clear();
-        await db.salary_records.clear();
-      }
-    );
+    };
+
+    return backup;
+  }
+
+  // Alias
+  static async exportFullBackup(): Promise<BackupData> {
+    return this.exportBackup();
+  }
+
+  /**
+   * Imports backup data directly into Supabase Cloud
+   */
+  static async importBackup(backup: BackupData, mode: ImportMode = 'merge'): Promise<ImportResult> {
+    const result: ImportResult = {
+      success: false,
+      mode,
+      importedCounts: {
+        employees: 0,
+        attendance: 0,
+        leaveTypes: 0,
+        leaves: 0,
+        holidays: 0,
+        salaryRecords: 0,
+        settings: 0,
+      },
+      skippedCounts: {
+        employees: 0,
+        attendance: 0,
+        leaveTypes: 0,
+        leaves: 0,
+        holidays: 0,
+        salaryRecords: 0,
+      },
+      message: '',
+    };
+
     try {
-      const { FirebaseSyncService } = await import('./firebaseSyncService');
-      await FirebaseSyncService.clearCloudDatabase();
-      window.dispatchEvent(new CustomEvent('staffpay_database_updated'));
-    } catch (e) {
-      console.warn('Could not reset cloud database during local wipe:', e);
+      const employees = backup.employees || [];
+      const attendance = backup.attendance || [];
+      const leaveTypes = backup.leaveTypes || [];
+      const leaves = backup.leaves || [];
+      const holidays = backup.holidays || [];
+      const salaryRecords = backup.salaryRecords || [];
+
+      // 1. Import Leave Types
+      for (const lt of leaveTypes) {
+        try {
+          await LeaveService.createLeaveType(lt);
+          result.importedCounts.leaveTypes++;
+        } catch {
+          result.skippedCounts.leaveTypes++;
+        }
+      }
+
+      // 2. Import Employees
+      for (const emp of employees) {
+        try {
+          await EmployeeService.create(emp);
+          result.importedCounts.employees++;
+        } catch {
+          result.skippedCounts.employees++;
+        }
+      }
+
+      // 3. Import Attendance
+      if (attendance.length > 0) {
+        await AttendanceService.bulkSetStatus(attendance);
+        result.importedCounts.attendance = attendance.length;
+      }
+
+      // 4. Import Leaves
+      for (const l of leaves) {
+        try {
+          await LeaveService.createLeave(l);
+          result.importedCounts.leaves++;
+        } catch {
+          result.skippedCounts.leaves++;
+        }
+      }
+
+      // 5. Import Holidays
+      for (const h of holidays) {
+        try {
+          await HolidayService.create(h);
+          result.importedCounts.holidays++;
+        } catch {
+          result.skippedCounts.holidays++;
+        }
+      }
+
+      // 6. Import Salary Records
+      for (const s of salaryRecords) {
+        try {
+          await SalaryService.saveFinalizedRecord(s);
+          result.importedCounts.salaryRecords++;
+        } catch {
+          result.skippedCounts.salaryRecords++;
+        }
+      }
+
+      // 7. Import Settings
+      if (backup.settings && Array.isArray(backup.settings)) {
+        for (const st of backup.settings) {
+          if (st.key && st.value) {
+            await SettingsService.set(st.key, st.value);
+            result.importedCounts.settings++;
+          }
+        }
+      }
+
+      result.success = true;
+      result.message = `Successfully imported ${result.importedCounts.employees} employees and ${result.importedCounts.attendance} attendance records.`;
+      return result;
+    } catch (err: any) {
+      result.success = false;
+      result.message = err.message || 'Import failed';
+      return result;
     }
+  }
+
+  /**
+   * Gets database summary counts from Supabase
+   */
+  static async getSummary() {
+    const [employees, attendance, leaves, holidays, salaryRecords] = await Promise.all([
+      EmployeeService.count(),
+      AttendanceService.count(),
+      LeaveService.count(),
+      HolidayService.count(),
+      SalaryService.count(),
+    ]);
+
+    return {
+      employees,
+      attendance,
+      leaves,
+      holidays,
+      salaryRecords,
+      lastCalculated: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Triggers browser download of backup JSON file
+   */
+  static downloadBackupFile(backup: BackupData): void {
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `StaffPay_Cloud_Backup_${dateStr}.json`;
+    const jsonStr = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 }

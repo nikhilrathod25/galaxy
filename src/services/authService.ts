@@ -1,94 +1,178 @@
-import { SettingsRepository } from '../repositories/settingsRepository';
-import { AuthSettings } from '../types';
+import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
-const SESSION_AUTH_KEY = 'staffpay_session_unlocked';
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+}
 
 export class AuthService {
+  private static currentUser: User | null = null;
+  private static currentSession: Session | null = null;
+  private static isInitialized = false;
+
   /**
-   * Lightweight client-side hash (SHA-256 via Web Crypto API)
+   * Transforms username into a secure internal Supabase Auth email identity
    */
-  private static async hashPin(pin: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(pin + '_staffpay_salt_2026');
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  static normalizeUsernameToEmail(username: string): string {
+    const clean = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+    return `${clean}@staffpay.internal`;
   }
 
   /**
-   * Returns current auth settings
+   * Initializes authentication state from Supabase session
    */
-  static async getAuthSettings(): Promise<AuthSettings> {
-    return SettingsRepository.getAuthSettings();
-  }
-
-  /**
-   * Checks if PIN lock is enabled
-   */
-  static async isPinSet(): Promise<boolean> {
-    const auth = await this.getAuthSettings();
-    return auth.pinEnabled && Boolean(auth.pinHash);
-  }
-
-  /**
-   * Sets up or updates the Admin PIN
-   */
-  static async setPin(newPin: string): Promise<void> {
-    const hash = await this.hashPin(newPin);
-    await SettingsRepository.saveAuthSettings({
-      pinEnabled: true,
-      pinHash: hash,
-    });
-    this.setSessionUnlocked(true);
-  }
-
-  /**
-   * Disables PIN protection
-   */
-  static async disablePin(): Promise<void> {
-    await SettingsRepository.saveAuthSettings({
-      pinEnabled: false,
-      pinHash: '',
-    });
-    this.setSessionUnlocked(true);
-  }
-
-  /**
-   * Verifies an entered PIN against stored hash
-   */
-  static async verifyPin(enteredPin: string): Promise<boolean> {
-    const auth = await this.getAuthSettings();
-    if (!auth.pinEnabled || !auth.pinHash) {
-      return true;
+  static async initialize(): Promise<User | null> {
+    if (this.isInitialized && this.currentUser) {
+      return this.currentUser;
     }
-    const hash = await this.hashPin(enteredPin);
-    const isValid = hash === auth.pinHash;
-    if (isValid) {
-      this.setSessionUnlocked(true);
-      await SettingsRepository.saveAuthSettings({
-        ...auth,
-        lastLoginAt: new Date().toISOString(),
+
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (!error && data?.session?.user) {
+        this.currentSession = data.session;
+        this.currentUser = data.session.user;
+      } else {
+        this.currentSession = null;
+        this.currentUser = null;
+      }
+    } catch (e) {
+      console.warn('Auth initialization notice:', e);
+      this.currentSession = null;
+      this.currentUser = null;
+    }
+
+    this.isInitialized = true;
+    return this.currentUser;
+  }
+
+  /**
+   * Subscribes to Supabase Auth state changes
+   */
+  static onAuthStateChange(
+    callback: (event: AuthChangeEvent, session: Session | null) => void
+  ) {
+    return supabase.auth.onAuthStateChange((event, session) => {
+      this.currentSession = session;
+      this.currentUser = session?.user || null;
+      callback(event, session);
+    });
+  }
+
+  /**
+   * Logs in the Admin with username and password.
+   * If the Admin account does not exist in Supabase yet, automatically registers it.
+   */
+  static async login(usernameInput: string, passwordInput: string): Promise<AdminUser> {
+    const username = usernameInput.trim().toLowerCase();
+    if (!username || !passwordInput) {
+      throw new Error('Please enter both username and password.');
+    }
+    if (passwordInput.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
+
+    const email = this.normalizeUsernameToEmail(username);
+
+    // 1. Attempt Sign In
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: passwordInput,
+    });
+
+    if (!signInError && signInData?.user) {
+      this.currentUser = signInData.user;
+      this.currentSession = signInData.session;
+      return {
+        id: signInData.user.id,
+        username,
+        email,
+      };
+    }
+
+    // 2. If user not found / invalid credentials on first attempt, try auto sign-up
+    if (
+      signInError &&
+      (signInError.message.toLowerCase().includes('invalid login credentials') ||
+        signInError.message.toLowerCase().includes('user not found'))
+    ) {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: passwordInput,
+        options: {
+          data: {
+            username,
+            role: 'admin',
+          },
+        },
       });
+
+      if (!signUpError && signUpData?.user) {
+        // If Supabase auto-confirms or returns session
+        if (signUpData.session) {
+          this.currentUser = signUpData.user;
+          this.currentSession = signUpData.session;
+          return {
+            id: signUpData.user.id,
+            username,
+            email,
+          };
+        }
+
+        // Try immediate login after signup
+        const retry = await supabase.auth.signInWithPassword({
+          email,
+          password: passwordInput,
+        });
+
+        if (!retry.error && retry.data?.user) {
+          this.currentUser = retry.data.user;
+          this.currentSession = retry.data.session;
+          return {
+            id: retry.data.user.id,
+            username,
+            email,
+          };
+        }
+      }
+
+      // If signup also failed with "User already registered", it was an incorrect password
+      if (signUpError && signUpError.message.toLowerCase().includes('already registered')) {
+        throw new Error('Incorrect password. Please try again.');
+      }
     }
-    return isValid;
+
+    throw new Error(signInError?.message || 'Authentication failed. Please check credentials.');
   }
 
   /**
-   * Session unlock state helpers
+   * Logs out the Admin and terminates the Supabase Auth session
    */
-  static isSessionUnlocked(): boolean {
-    return sessionStorage.getItem(SESSION_AUTH_KEY) === 'true';
+  static async logout(): Promise<void> {
+    this.currentUser = null;
+    this.currentSession = null;
+    await supabase.auth.signOut();
   }
 
-  static setSessionUnlocked(unlocked: boolean): void {
-    if (unlocked) {
-      sessionStorage.setItem(SESSION_AUTH_KEY, 'true');
-    } else {
-      sessionStorage.removeItem(SESSION_AUTH_KEY);
-    }
+  /**
+   * Returns current authenticated user
+   */
+  static getCurrentUser(): User | null {
+    return this.currentUser;
   }
 
-  static lockSession(): void {
-    sessionStorage.removeItem(SESSION_AUTH_KEY);
+  /**
+   * Returns current session
+   */
+  static getCurrentSession(): Session | null {
+    return this.currentSession;
+  }
+
+  /**
+   * Returns true if Admin is logged in
+   */
+  static isAuthenticated(): boolean {
+    return Boolean(this.currentUser || this.currentSession);
   }
 }

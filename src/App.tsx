@@ -10,11 +10,7 @@ import {
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
 import { AuthService } from './services/authService';
-import { AccountService } from './services/accountService';
-import { CloudSyncService } from './services/cloudSyncService';
-import { FirebaseSyncService } from './services/firebaseSyncService';
-import { MigrationModal } from './components/cloud/MigrationModal';
-import { MigrationState } from './types/cloud';
+import { RealtimeService } from './services/realtimeService';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
@@ -33,39 +29,54 @@ import { MobileBottomNav } from './components/common/MobileBottomNav';
 // Protected layout wrapper
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [hasPin, setHasPin] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
+    // 1. Subscribe to Supabase Realtime multi-device database changes
+    const unsubRealtime = RealtimeService.subscribe();
+
+    // 2. Check Supabase Auth Session
     const checkAuth = async () => {
-      // 1. StaffPay Account Authentication Check
-      if (!AccountService.isAuthenticated()) {
+      const user = await AuthService.initialize();
+      if (!user) {
         navigate('/login', { replace: true });
-        return;
-      }
-
-      // 2. Initialize Silent Background Cloud Sync
-      FirebaseSyncService.initialize().catch((err) => {
-        console.warn('Silent cloud sync notice:', err);
-      });
-
-      // 3. Local PIN Lock Check
-      const pinSet = await AuthService.isPinSet();
-      setHasPin(pinSet);
-
-      if (pinSet && !AuthService.isSessionUnlocked()) {
-        navigate('/login', { replace: true });
+      } else {
+        setIsCheckingAuth(false);
       }
     };
 
     checkAuth();
+
+    // 3. Listen to auth state changes (e.g. sign out from another tab)
+    const { data: authListener } = AuthService.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        navigate('/login', { replace: true });
+      }
+    });
+
+    return () => {
+      unsubRealtime();
+      authListener?.subscription.unsubscribe();
+    };
   }, [location.pathname, navigate]);
 
-  const handleLockApp = () => {
-    AuthService.lockSession();
+  const handleLogout = async () => {
+    await AuthService.logout();
     navigate('/login');
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-500 font-semibold">Loading StaffPay Cloud...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-slate-800">
@@ -73,16 +84,16 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onLockApp={handleLockApp}
-        hasPin={hasPin}
+        onLockApp={handleLogout}
+        hasPin={false}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all">
         <Navbar
           onOpenSidebar={() => setSidebarOpen(true)}
-          onLockApp={handleLockApp}
-          hasPin={hasPin}
+          onLockApp={handleLogout}
+          hasPin={false}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 w-full">
@@ -91,7 +102,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </div>
 
       {/* App-Style Mobile Bottom Navigation */}
-      <MobileBottomNav onLockApp={handleLockApp} hasPin={hasPin} />
+      <MobileBottomNav onLockApp={handleLogout} hasPin={false} />
     </div>
   );
 };
@@ -100,11 +111,11 @@ export const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        {/* Public Login / Register */}
+        {/* Public Login */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/setup" element={<LoginPage />} />
 
-        {/* Authenticated Routes with Sidebar & Navbar Layout */}
+        {/* Authenticated Cloud Routes */}
         <Route
           path="/dashboard"
           element={

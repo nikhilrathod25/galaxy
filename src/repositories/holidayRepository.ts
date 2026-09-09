@@ -1,50 +1,36 @@
-import { db } from '../db/database';
+import { HolidayService } from '../services/holidayService';
 import { Holiday } from '../types';
-import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class HolidayRepository {
   static async getAll(): Promise<Holiday[]> {
-    return db.holidays.orderBy('date').toArray();
+    return HolidayService.getAll();
   }
 
   static async getByYear(year: number): Promise<Holiday[]> {
-    return db.holidays.where('year').equals(year).sortBy('date');
+    return HolidayService.getByYear(year);
   }
 
   static async getByDateRange(startDate: string, endDate: string): Promise<Holiday[]> {
-    return db.holidays
-      .where('date')
-      .between(startDate, endDate, true, true)
-      .toArray();
+    return HolidayService.getByDateRange(startDate, endDate);
   }
 
   static async getByDate(date: string): Promise<Holiday | undefined> {
-    return db.holidays.where('date').equals(date).first();
+    return HolidayService.getByDate(date);
   }
 
   static async create(data: Omit<Holiday, 'id'>): Promise<number> {
-    const existing = await this.getByDate(data.date);
-    if (existing) {
-      throw new Error(`Holiday on ${data.date} already exists (${existing.name}).`);
-    }
-    const id = (await db.holidays.add(data)) as number;
-    FirebaseSyncService.notifyMutation();
-    return id;
+    return HolidayService.create(data);
   }
 
   static async update(id: number, data: Partial<Holiday>): Promise<number> {
-    const res = await db.holidays.update(id, data);
-    FirebaseSyncService.notifyMutation();
-    return res;
+    return HolidayService.update(id, data);
   }
 
   static async delete(id: number): Promise<void> {
-    await db.holidays.delete(id);
-    FirebaseSyncService.notifyMutation();
+    return HolidayService.delete(id);
   }
 
   static async count(): Promise<number> {
-    return db.holidays.count();
+    return HolidayService.count();
   }
 }
-

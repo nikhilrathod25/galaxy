@@ -1,73 +1,36 @@
-import { db } from '../db/database';
+import { EmployeeService } from '../services/employeeService';
 import { Employee, EmployeeStatus } from '../types';
-import { FirebaseSyncService } from '../services/firebaseSyncService';
 
 export class EmployeeRepository {
   static async getAll(status?: EmployeeStatus): Promise<Employee[]> {
-    if (status) {
-      return db.employees.where('status').equals(status).toArray();
-    }
-    return db.employees.orderBy('fullName').toArray();
+    return EmployeeService.getAll(status);
   }
 
   static async getById(id: number): Promise<Employee | undefined> {
-    return db.employees.get(id);
+    return EmployeeService.getById(id);
   }
 
   static async getByEmployeeId(employeeId: string): Promise<Employee | undefined> {
-    return db.employees.where('employeeId').equals(employeeId).first();
+    return EmployeeService.getByEmployeeId(employeeId);
   }
 
   static async generateNextEmployeeId(): Promise<string> {
-    const all = await db.employees.toArray();
-    let maxNum = 0;
-    for (const emp of all) {
-      const match = emp.employeeId.match(/^EMP(\d+)$/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
-    }
-    const nextNum = maxNum + 1;
-    return `EMP${String(nextNum).padStart(3, '0')}`;
+    return EmployeeService.generateNextEmployeeId();
   }
 
   static async create(data: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
-    const now = new Date().toISOString();
-    // Validate uniqueness of employeeId
-    const existing = await this.getByEmployeeId(data.employeeId);
-    if (existing) {
-      throw new Error(`Employee ID "${data.employeeId}" already exists.`);
-    }
-
-    const id = await db.employees.add({
-      ...data,
-      createdAt: now,
-      updatedAt: now,
-    });
-    FirebaseSyncService.notifyMutation();
-    return id as number;
+    return EmployeeService.create(data);
   }
 
   static async update(id: number, data: Partial<Employee>): Promise<number> {
-    const now = new Date().toISOString();
-    const res = await db.employees.update(id, {
-      ...data,
-      updatedAt: now,
-    });
-    FirebaseSyncService.notifyMutation();
-    return res;
+    return EmployeeService.update(id, data);
   }
 
   static async delete(id: number): Promise<void> {
-    await db.employees.delete(id);
-    FirebaseSyncService.notifyMutation();
+    return EmployeeService.delete(id);
   }
 
   static async count(): Promise<number> {
-    return db.employees.count();
+    return EmployeeService.count();
   }
 }
-

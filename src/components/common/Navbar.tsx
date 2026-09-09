@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, ShieldAlert, Download, Clock, ShieldCheck, Lock, Settings, LogOut, User } from 'lucide-react';
+import { Menu, Clock, Settings, LogOut, User, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SettingsRepository } from '../../repositories/settingsRepository';
-import { AccountService } from '../../services/accountService';
-import { SyncStatusIndicator } from '../cloud/SyncStatusIndicator';
+import { AuthService } from '../../services/authService';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { CompanySettings } from '../../types';
-import { StaffPayAccount } from '../../types/cloud';
 
 interface NavbarProps {
   onOpenSidebar: () => void;
@@ -16,22 +14,21 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenSidebar,
-  onLockApp,
-  hasPin,
 }) => {
   const navigate = useNavigate();
   const [company, setCompany] = useState<CompanySettings | null>(null);
-  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [activeAccount, setActiveAccount] = useState<StaffPayAccount | null>(AccountService.getActiveAccount());
+  const [adminEmail, setAdminEmail] = useState<string>('');
 
   useEffect(() => {
     const loadInfo = async () => {
       const c = await SettingsRepository.getCompanySettings();
       setCompany(c);
-      const meta = await SettingsRepository.getBackupMeta();
-      setLastBackupAt(meta.lastBackupAt);
-      setActiveAccount(AccountService.getActiveAccount());
+      const user = AuthService.getCurrentUser();
+      if (user) {
+        const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Admin';
+        setAdminEmail(username);
+      }
     };
     loadInfo();
 
@@ -50,40 +47,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const handleLogout = async () => {
-    if (window.confirm('Do you want to log out of your StaffPay account?')) {
-      await AccountService.logout();
+    if (window.confirm('Do you want to log out of StaffPay?')) {
+      await AuthService.logout();
       navigate('/login');
     }
   };
-
-  // Compute days since last backup
-  const getBackupStatus = () => {
-    if (!lastBackupAt) {
-      return {
-        isOverdue: true,
-        label: 'No Backup Yet',
-        color: 'text-orange-700 bg-orange-50 border-orange-200',
-      };
-    }
-    const backupDate = new Date(lastBackupAt).getTime();
-    const now = Date.now();
-    const daysDiff = (now - backupDate) / (1000 * 3600 * 24);
-
-    if (daysDiff > 7) {
-      return {
-        isOverdue: true,
-        label: 'Backup Overdue',
-        color: 'text-rose-700 bg-rose-50 border-rose-200',
-      };
-    }
-    return {
-      isOverdue: false,
-      label: `Backed up: ${formatDisplayDate(lastBackupAt, 'dd MMM')}`,
-      color: 'text-blue-700 bg-blue-50 border-blue-200',
-    };
-  };
-
-  const backupStatus = getBackupStatus();
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
@@ -99,6 +67,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
             <span>{company?.companyName || 'StaffPay'}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+              Online Cloud
+            </span>
           </h1>
           <p className="text-[11px] text-slate-500">
             {formatDisplayDate(new Date().toISOString(), 'EEEE, dd MMMM yyyy')}
@@ -113,34 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>{currentTime}</span>
         </div>
 
-        {/* Google Drive Central Sync Status Indicator */}
-        <SyncStatusIndicator />
-
-        {/* Backup Status Pill */}
-        <Link
-          to="/backup"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all hover:shadow-sm ${backupStatus.color}`}
-          title="Click to manage database backup & restore"
-        >
-          {backupStatus.isOverdue ? (
-            <ShieldAlert className="w-3.5 h-3.5 text-orange-500" />
-          ) : (
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-          )}
-          <span className="hidden md:inline">{backupStatus.label}</span>
-          <span className="md:hidden">Backup</span>
-        </Link>
-
-        {/* Quick Export Button in Orange */}
-        <Link
-          to="/backup"
-          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold transition-all shadow-sm shadow-orange-500/20 active:scale-[0.98]"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Export</span>
-        </Link>
-
-        {/* Settings button in Header Menu */}
+        {/* Settings Button */}
         <Link
           to="/settings"
           className="p-2 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors"
@@ -150,38 +95,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Settings className="w-4 h-4" />
         </Link>
 
-        {/* Lock PIN button */}
-        {hasPin && onLockApp && (
-          <button
-            onClick={onLockApp}
-            className="p-2 rounded-xl text-slate-500 hover:text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
-            title="Lock application"
-            aria-label="Lock application"
+        {/* Admin Account Badge & Logout */}
+        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200/80"
+            title="Authenticated Admin"
           >
-            <Lock className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* StaffPay Account Badge & Logout */}
-        {activeAccount && (
-          <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-            <div
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200/80"
-              title={`StaffPay Account: ${activeAccount.username} (${activeAccount.accountId})`}
-            >
-              <User className="w-3.5 h-3.5 text-blue-600" />
-              <span className="max-w-[100px] truncate">{activeAccount.username}</span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-              title="Log Out of StaffPay Account"
-              aria-label="Log Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <User className="w-3.5 h-3.5 text-blue-600" />
+            <span className="max-w-[120px] truncate">{adminEmail || 'Admin'}</span>
           </div>
-        )}
+          <button
+            onClick={handleLogout}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+            title="Log Out of StaffPay"
+            aria-label="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </header>
   );
