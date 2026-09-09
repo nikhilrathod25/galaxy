@@ -12,6 +12,7 @@ import { Sidebar } from './components/common/Sidebar';
 import { AuthService } from './services/authService';
 import { AccountService } from './services/accountService';
 import { CloudSyncService } from './services/cloudSyncService';
+import { FirebaseSyncService } from './services/firebaseSyncService';
 import { MigrationModal } from './components/cloud/MigrationModal';
 import { MigrationState } from './types/cloud';
 
@@ -51,6 +52,9 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       }
 
       // 2. Initialize Cloud Sync for current Account
+      FirebaseSyncService.initialize().catch((err) => {
+        console.warn('Initial firebase sync notice:', err);
+      });
       CloudSyncService.initialize().catch((err) => {
         console.warn('Initial cloud sync notice:', err);
       });

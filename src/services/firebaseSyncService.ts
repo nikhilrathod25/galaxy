@@ -64,7 +64,7 @@ export class FirebaseSyncService {
     this.emitSyncState();
 
     // Start real-time Firestore listener for this account
-    this.attachRealtimeListener(account.accountId);
+    this.attachRealtimeListener(account.username);
 
     if (!this.isInitialized) {
       this.isInitialized = true;
@@ -99,18 +99,27 @@ export class FirebaseSyncService {
   }
 
   /**
+   * Helper to get stable normalized Firestore document reference by username
+   */
+  private static getAccountDocRef(username: string) {
+    const key = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+    return doc(firestore, 'accounts', `u_${key}`, 'cloud_data', 'main');
+  }
+
+  /**
    * Attaches real-time Firestore listener to automatically update local state when changed on another device
    */
-  private static attachRealtimeListener(accountId: string): void {
-    if (this.currentAccountId === accountId && this.unsubscribeSnapshot) {
+  private static attachRealtimeListener(username: string): void {
+    const key = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+    if (this.currentAccountId === key && this.unsubscribeSnapshot) {
       return;
     }
 
     this.cleanupListener();
-    this.currentAccountId = accountId;
+    this.currentAccountId = key;
 
     try {
-      const docRef = doc(firestore, 'accounts', accountId, 'cloud_data', 'main');
+      const docRef = this.getAccountDocRef(username);
       this.unsubscribeSnapshot = onSnapshot(
         docRef,
         async (snapshot) => {
@@ -257,7 +266,7 @@ export class FirebaseSyncService {
     this.emitSyncState();
 
     try {
-      const docRef = doc(firestore, 'accounts', account.accountId, 'cloud_data', 'main');
+      const docRef = this.getAccountDocRef(account.username);
       const docSnap = await getDoc(docRef);
 
       let remoteDb: CloudDatabase;
