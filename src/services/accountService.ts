@@ -251,6 +251,35 @@ export class AccountService {
   }
 
   /**
+   * Syncs all local registered accounts to Cloud Firestore so any device can authenticate
+   */
+  static async syncAllLocalAccountsToCloud(): Promise<void> {
+    const accounts = this.getAccounts();
+    for (const acc of accounts) {
+      if (acc.username && acc.passwordHash && acc.passwordSalt) {
+        try {
+          const userDocRef = doc(firestore, 'users', acc.username.toLowerCase().trim());
+          const snap = await getDoc(userDocRef);
+          if (!snap.exists()) {
+            await setDoc(userDocRef, {
+              accountId: acc.accountId,
+              username: acc.username.toLowerCase().trim(),
+              passwordHash: acc.passwordHash,
+              passwordSalt: acc.passwordSalt,
+              companyName: acc.companyName || 'StaffPay Business',
+              createdAt: acc.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              status: 'active',
+            });
+          }
+        } catch (e) {
+          console.warn('Account cloud sync warning:', e);
+        }
+      }
+    }
+  }
+
+  /**
    * Sets the active session account
    */
   static setActiveAccount(account: StaffPayAccount): void {

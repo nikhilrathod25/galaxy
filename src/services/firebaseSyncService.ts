@@ -44,6 +44,7 @@ export class FirebaseSyncService {
    * Initializes real-time Firestore sync and event listeners
    */
   static async initialize(): Promise<void> {
+    await AccountService.syncAllLocalAccountsToCloud().catch(() => {});
     const account = AccountService.getActiveAccount();
     const currentUser = auth.currentUser;
 

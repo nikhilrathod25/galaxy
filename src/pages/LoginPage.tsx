@@ -42,6 +42,7 @@ export const LoginPage: React.FC = () => {
   const [confirmPin, setConfirmPin] = useState('');
 
   useEffect(() => {
+    AccountService.syncAllLocalAccountsToCloud().catch(() => {});
     const checkState = async () => {
       const acc = AccountService.getActiveAccount();
       setActiveAccount(acc);
