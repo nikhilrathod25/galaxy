@@ -53,7 +53,7 @@ export const AttendancePage: React.FC = () => {
         const emps = await EmployeeRepository.getAll();
         setEmployees(emps);
         if (emps.length > 0) {
-          setSelectedEmployeeId(emps[0].employeeId);
+          setSelectedEmployeeId((prev) => prev || emps[0].employeeId);
         }
         const hols = await HolidayRepository.getAll();
         setHolidays(hols);
@@ -64,6 +64,15 @@ export const AttendancePage: React.FC = () => {
       }
     };
     loadInitial();
+
+    const handleDataUpdate = () => {
+      loadInitial();
+    };
+
+    window.addEventListener('staffpay_database_updated', handleDataUpdate);
+    return () => {
+      window.removeEventListener('staffpay_database_updated', handleDataUpdate);
+    };
   }, []);
 
   // Load daily attendance whenever selectedDate changes

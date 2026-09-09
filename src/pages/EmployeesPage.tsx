@@ -47,6 +47,15 @@ export const EmployeesPage: React.FC = () => {
 
   useEffect(() => {
     loadEmployees();
+
+    const handleDataUpdate = () => {
+      loadEmployees();
+    };
+
+    window.addEventListener('staffpay_database_updated', handleDataUpdate);
+    return () => {
+      window.removeEventListener('staffpay_database_updated', handleDataUpdate);
+    };
   }, []);
 
   const filteredEmployees = useMemo(() => {

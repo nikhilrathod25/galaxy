@@ -324,6 +324,13 @@ export class FirebaseSyncService {
         this.isCloudOriginUpdate = false;
       }
 
+      // Notify active UI components that database has been refreshed from cloud
+      try {
+        window.dispatchEvent(new CustomEvent('staffpay_database_updated'));
+      } catch (e) {
+        // Ignore in non-DOM environments
+      }
+
       // 4. Update Firestore cloud database atomically
       const now = new Date().toISOString();
       const nextRevision = (remoteDb.revision || 0) + 1;

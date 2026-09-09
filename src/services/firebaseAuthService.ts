@@ -88,9 +88,28 @@ export class FirebaseAuthService {
     const email = this.normalizeEmail(usernameOrEmail);
     const username = usernameOrEmail.includes('@') ? usernameOrEmail.split('@')[0] : usernameOrEmail.trim().toLowerCase();
 
-    // 1. Authenticate with Firebase Auth
-    const credential = await signInWithEmailAndPassword(auth, email, password);
-    const uid = credential.user.uid;
+    // 1. Authenticate with Firebase Auth (or auto-register legacy/initial accounts)
+    let uid: string;
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      uid = credential.user.uid;
+    } catch (authErr: any) {
+      if (
+        authErr.code === 'auth/user-not-found' ||
+        authErr.code === 'auth/invalid-credential' ||
+        authErr.code === 'auth/user-disabled'
+      ) {
+        // Automatically create user in Firebase Auth
+        try {
+          const newCred = await createUserWithEmailAndPassword(auth, email, password);
+          uid = newCred.user.uid;
+        } catch (createErr) {
+          throw authErr;
+        }
+      } else {
+        throw authErr;
+      }
+    }
     const now = new Date().toISOString();
 
     // 2. Fetch account metadata from Firestore

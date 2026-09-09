@@ -91,6 +91,15 @@ export const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+
+    const handleDataUpdate = () => {
+      loadDashboardData();
+    };
+
+    window.addEventListener('staffpay_database_updated', handleDataUpdate);
+    return () => {
+      window.removeEventListener('staffpay_database_updated', handleDataUpdate);
+    };
   }, []);
 
   const handleDirectExport = async () => {
