@@ -5,11 +5,13 @@ import { Holiday } from './holiday';
 import { FinalizedSalaryRecord } from './salary';
 import { AppSettingEntry } from './settings';
 
+export type { LeaveType };
+
 export interface StaffPayAccount {
-  accountId: string; // Unique stable ID (e.g. sp_01hf98...)
+  accountId: string; // Unique stable ID (e.g. sp_01hf98... or firebase uid)
   username: string; // Normalized lowercase username
-  passwordHash: string; // PBKDF2-SHA256 hash
-  passwordSalt: string; // Cryptographic random salt (hex)
+  passwordHash?: string; // PBKDF2-SHA256 hash (local)
+  passwordSalt?: string; // Cryptographic random salt (local)
   createdAt: string;
   updatedAt: string;
   status: 'active' | 'suspended';

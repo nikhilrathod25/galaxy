@@ -2,6 +2,7 @@ import { db } from '../db/database';
 import { GoogleAuthService } from './googleAuthService';
 import { GoogleDriveService, DriveFileInfo } from './googleDriveService';
 import { AccountService } from './accountService';
+import { FirebaseSyncService } from './firebaseSyncService';
 import {
   CloudDatabase,
   SyncState,
@@ -71,7 +72,8 @@ export class CloudSyncService {
     this.syncState.activeUsername = account.username;
     this.syncState.activeAccountId = account.accountId;
     this.syncState.connectedEmail = googleUser?.email || null;
-    this.syncState.status = navigator.onLine ? 'pending' : 'offline';
+    this.syncState.status = googleUser ? (navigator.onLine ? 'pending' : 'offline') : 'unauthenticated';
+    this.syncState.lastError = null;
     this.emitSyncState();
 
     if (!this.isInitialized) {
@@ -79,7 +81,7 @@ export class CloudSyncService {
 
       // Auto-sync on network reconnect
       window.addEventListener('online', () => {
-        if (AccountService.getActiveAccount()) {
+        if (AccountService.getActiveAccount() && GoogleAuthService.isAuthenticated()) {
           this.syncState.status = 'pending';
           this.emitSyncState();
           this.sync();
@@ -87,13 +89,15 @@ export class CloudSyncService {
       });
 
       window.addEventListener('offline', () => {
-        this.syncState.status = 'offline';
-        this.emitSyncState();
+        if (GoogleAuthService.isAuthenticated()) {
+          this.syncState.status = 'offline';
+          this.emitSyncState();
+        }
       });
 
       // Auto-sync on window focus
       window.addEventListener('focus', () => {
-        if (navigator.onLine && AccountService.getActiveAccount() && !this.isSyncing) {
+        if (navigator.onLine && AccountService.getActiveAccount() && GoogleAuthService.isAuthenticated() && !this.isSyncing) {
           this.sync();
         }
       });
@@ -105,14 +109,22 @@ export class CloudSyncService {
           this.syncState.connectedEmail = u?.email || null;
           this.syncState.activeUsername = acc.username;
           this.syncState.activeAccountId = acc.accountId;
-          this.syncState.status = navigator.onLine ? 'pending' : 'offline';
-          this.emitSyncState();
-          this.checkAndMigrate();
+          if (u) {
+            this.syncState.status = navigator.onLine ? 'pending' : 'offline';
+            this.emitSyncState();
+            this.checkAndMigrate();
+          } else {
+            this.syncState.status = 'unauthenticated';
+            this.syncState.lastError = null;
+            this.emitSyncState();
+          }
         }
       });
     }
 
-    await this.checkAndMigrate();
+    if (GoogleAuthService.isAuthenticated()) {
+      await this.checkAndMigrate();
+    }
   }
 
   // Alias for initialize
@@ -192,12 +204,14 @@ export class CloudSyncService {
     }
     this.emitSyncState();
 
+    FirebaseSyncService.notifyMutation();
+
     // Debounce cloud write (2000ms)
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
 
-    if (navigator.onLine && AccountService.getActiveAccount()) {
+    if (navigator.onLine && AccountService.getActiveAccount() && GoogleAuthService.isAuthenticated()) {
       this.debounceTimer = setTimeout(() => {
         this.sync();
       }, 2000);
@@ -209,7 +223,7 @@ export class CloudSyncService {
    */
   private static async checkAndMigrate(): Promise<void> {
     const account = AccountService.getActiveAccount();
-    if (!account || !navigator.onLine) return;
+    if (!account || !navigator.onLine || !GoogleAuthService.isAuthenticated()) return;
 
     try {
       const localEmp = await db.employees.count();
@@ -432,6 +446,18 @@ export class CloudSyncService {
         syncedAt: new Date().toISOString(),
         pulledCounts: { employees: 0, attendance: 0, leaves: 0, holidays: 0, salaryRecords: 0 },
         error: 'Offline',
+      };
+    }
+
+    if (!GoogleAuthService.isAuthenticated()) {
+      this.syncState.status = 'unauthenticated';
+      this.syncState.lastError = null;
+      this.emitSyncState();
+      return {
+        success: false,
+        syncedAt: new Date().toISOString(),
+        pulledCounts: { employees: 0, attendance: 0, leaves: 0, holidays: 0, salaryRecords: 0 },
+        error: 'Google Drive is not connected.',
       };
     }
 

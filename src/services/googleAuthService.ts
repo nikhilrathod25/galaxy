@@ -176,8 +176,12 @@ export class GoogleAuthService {
     const client = await this.initTokenClient();
 
     return new Promise<GoogleUser>((resolve, reject) => {
+      let settled = false;
+
       client.callback = async (response: any) => {
+        if (settled) return;
         if (response.error) {
+          settled = true;
           reject(new Error(response.error_description || response.error));
           return;
         }
@@ -200,14 +204,23 @@ export class GoogleAuthService {
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
           this.notifyListeners(user);
 
+          settled = true;
           resolve(user);
         } catch (err) {
+          settled = true;
           reject(err);
         }
       };
 
       // Prompt token request popup
-      client.requestAccessToken({ prompt: 'select_account' });
+      try {
+        client.requestAccessToken({ prompt: 'select_account' });
+      } catch (err: any) {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      }
     });
   }
 

@@ -159,9 +159,11 @@ export class AccountService {
       throw new Error('Invalid username or password. If you are new, click "Create Account".');
     }
 
-    const computedHash = await this.hashPassword(passwordInput, account.passwordSalt);
-    if (computedHash !== account.passwordHash) {
-      throw new Error('Invalid username or password.');
+    if (account.passwordSalt && account.passwordHash) {
+      const computedHash = await this.hashPassword(passwordInput, account.passwordSalt);
+      if (computedHash !== account.passwordHash) {
+        throw new Error('Invalid username or password.');
+      }
     }
 
     this.setActiveAccount(account);

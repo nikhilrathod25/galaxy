@@ -1,32 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { CloudSyncService } from '../../services/cloudSyncService';
-import { GoogleAuthService } from '../../services/googleAuthService';
+import { FirebaseSyncService } from '../../services/firebaseSyncService';
 import { AccountService } from '../../services/accountService';
-import { SyncState, StaffPayAccount, GoogleUser } from '../../types/cloud';
-import { Cloud, CloudOff, RefreshCw, AlertCircle, CheckCircle2, ChevronDown, User, LogIn } from 'lucide-react';
+import { SyncState, StaffPayAccount } from '../../types/cloud';
+import { Cloud, CloudOff, RefreshCw, AlertCircle, CheckCircle2, ChevronDown, User, ShieldCheck, Zap } from 'lucide-react';
 
 export const SyncStatusIndicator: React.FC = () => {
-  const [syncState, setSyncState] = useState<SyncState>(CloudSyncService.getSyncState());
+  const [syncState, setSyncState] = useState<SyncState>(FirebaseSyncService.getSyncState());
   const [activeAccount, setActiveAccount] = useState<StaffPayAccount | null>(AccountService.getActiveAccount());
-  const [googleUser, setGoogleUser] = useState<GoogleUser | null>(GoogleAuthService.getCurrentUser());
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [manualSyncing, setManualSyncing] = useState(false);
 
   useEffect(() => {
-    const unsubSync = CloudSyncService.subscribe((state) => {
+    const unsubSync = FirebaseSyncService.subscribe((state) => {
       setSyncState({ ...state });
       setActiveAccount(AccountService.getActiveAccount());
-      setGoogleUser(GoogleAuthService.getCurrentUser());
-    });
-
-    const unsubAuth = GoogleAuthService.subscribe((u) => {
-      setGoogleUser(u);
     });
 
     return () => {
       unsubSync();
-      unsubAuth();
     };
   }, []);
 
@@ -34,30 +25,12 @@ export const SyncStatusIndicator: React.FC = () => {
     return null;
   }
 
-  const handleConnectGoogle = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsConnectingGoogle(true);
-    try {
-      await GoogleAuthService.login();
-      await CloudSyncService.sync();
-    } catch (err: any) {
-      alert(`Google Connection error: ${err.message}`);
-    } finally {
-      setIsConnectingGoogle(false);
-    }
-  };
-
   const handleManualSync = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!GoogleAuthService.isAuthenticated()) {
-      handleConnectGoogle(e);
-      return;
-    }
-
     if (manualSyncing || syncState.status === 'syncing') return;
     setManualSyncing(true);
     try {
-      await CloudSyncService.sync();
+      await FirebaseSyncService.sync();
     } catch (err) {
       console.error('Manual sync failed', err);
     } finally {
@@ -66,7 +39,7 @@ export const SyncStatusIndicator: React.FC = () => {
   };
 
   const formatLastSync = (isoString: string | null) => {
-    if (!isoString) return 'Never';
+    if (!isoString) return 'Just now';
     const date = new Date(isoString);
     const now = new Date();
     const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
@@ -78,16 +51,7 @@ export const SyncStatusIndicator: React.FC = () => {
   };
 
   const getStatusBadge = () => {
-    if (!googleUser) {
-      return (
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
-          <Cloud className="w-3.5 h-3.5 text-blue-500" />
-          <span className="hidden sm:inline">Connect Drive</span>
-        </div>
-      );
-    }
-
-    const isSyncing = syncState.status === 'syncing' || manualSyncing || isConnectingGoogle;
+    const isSyncing = syncState.status === 'syncing' || manualSyncing;
 
     if (isSyncing) {
       return (
@@ -112,11 +76,11 @@ export const SyncStatusIndicator: React.FC = () => {
       );
     }
 
-    if (syncState.status === 'error' && googleUser) {
+    if (syncState.status === 'error' && syncState.lastError) {
       return (
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium border border-red-200">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-          <span className="hidden sm:inline">Sync Error</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+          <span className="hidden sm:inline">Local Saved</span>
         </div>
       );
     }
@@ -133,7 +97,7 @@ export const SyncStatusIndicator: React.FC = () => {
     return (
       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-        <span className="hidden sm:inline">Synced</span>
+        <span className="hidden sm:inline">Cloud Synced</span>
       </div>
     );
   };
@@ -143,7 +107,7 @@ export const SyncStatusIndicator: React.FC = () => {
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         className="flex items-center gap-1.5 hover:opacity-80 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
-        title={`StaffPay Cloud Sync Status (Click for details)`}
+        title="Firebase Real-Time Cloud Sync (Click for details)"
         type="button"
       >
         {getStatusBadge()}
@@ -170,24 +134,25 @@ export const SyncStatusIndicator: React.FC = () => {
                   </div>
                 </div>
               </div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                <Zap className="w-3 h-3 text-emerald-500" />
+                Realtime
+              </span>
             </div>
 
             <div className="py-3 space-y-2 text-xs">
               <div className="flex justify-between items-center text-slate-600">
-                <span>Google Account:</span>
-                <span className="font-semibold text-slate-800 truncate max-w-[140px]">
-                  {googleUser ? googleUser.email : 'Not connected'}
+                <span>Account ID:</span>
+                <span className="font-semibold text-slate-800 truncate max-w-[140px] font-mono text-[11px]">
+                  {activeAccount.username}
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-slate-600">
-                <span>Sync Status:</span>
-                <span className="font-medium capitalize text-slate-800 flex items-center gap-1">
-                  {googleUser && syncState.status === 'synced' && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
-                  {googleUser && syncState.status === 'syncing' && <span className="w-2 h-2 rounded-full bg-blue-500 animate-spin"></span>}
-                  {googleUser && syncState.status === 'offline' && <span className="w-2 h-2 rounded-full bg-slate-400"></span>}
-                  {googleUser && syncState.status === 'error' && <span className="w-2 h-2 rounded-full bg-red-500"></span>}
-                  {!googleUser ? 'Local (Connect Drive)' : syncState.status}
+                <span>Multi-Device Sync:</span>
+                <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  Active (All Browsers)
                 </span>
               </div>
 
@@ -200,40 +165,26 @@ export const SyncStatusIndicator: React.FC = () => {
 
               {syncState.pendingCount > 0 && (
                 <div className="flex justify-between items-center text-amber-700 bg-amber-50 px-2 py-1 rounded-md">
-                  <span>Pending local changes:</span>
+                  <span>Pending changes:</span>
                   <span className="font-bold">{syncState.pendingCount}</span>
                 </div>
               )}
 
-              {!googleUser && (
-                <div className="text-[11px] text-blue-700 bg-blue-50 p-2 rounded-xl border border-blue-100 mt-1 leading-relaxed">
-                  Connect your Google Drive once to enable automatic cloud backup across all your devices.
-                </div>
-              )}
+              <div className="text-[11px] text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-100 mt-1 leading-relaxed">
+                Your data is automatically synced across all devices and browsers whenever you log in with your account credentials.
+              </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100">
-              {!googleUser ? (
-                <button
-                  onClick={handleConnectGoogle}
-                  disabled={isConnectingGoogle}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-                  type="button"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{isConnectingGoogle ? 'Connecting...' : 'Connect Google Drive'}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleManualSync}
-                  disabled={manualSyncing || syncState.status === 'syncing'}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-                  type="button"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${manualSyncing || syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
-                  <span>{manualSyncing || syncState.status === 'syncing' ? 'Syncing...' : 'Sync Now'}</span>
-                </button>
-              )}
+              <button
+                onClick={handleManualSync}
+                disabled={manualSyncing || syncState.status === 'syncing'}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                type="button"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${manualSyncing || syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
+                <span>{manualSyncing || syncState.status === 'syncing' ? 'Syncing...' : 'Sync Cloud Now'}</span>
+              </button>
             </div>
           </div>
         </>

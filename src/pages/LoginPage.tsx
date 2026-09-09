@@ -17,6 +17,8 @@ import { AuthService } from '../services/authService';
 import { AccountService } from '../services/accountService';
 import { CloudSyncService } from '../services/cloudSyncService';
 import { GoogleAuthService } from '../services/googleAuthService';
+import { FirebaseAuthService } from '../services/firebaseAuthService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 import { StaffPayAccount } from '../types/cloud';
 
 export const LoginPage: React.FC = () => {
@@ -64,10 +66,20 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const account = await AccountService.authenticate(username, password);
+      let account: StaffPayAccount;
+      try {
+        // First attempt Firebase Cloud Auth for cross-device login
+        account = await FirebaseAuthService.login(username, password);
+      } catch (cloudErr: any) {
+        // If offline or local credentials exist, fallback to local authentication
+        console.info('Firebase login fallback to local:', cloudErr?.message);
+        account = await AccountService.authenticate(username, password);
+      }
+
       setActiveAccount(account);
 
-      // Initialize cloud sync for this account
+      // Initialize Firebase Cloud sync and background sync
+      await FirebaseSyncService.initialize();
       await CloudSyncService.initialize();
 
       const hasPin = await AuthService.isPinSet();
@@ -90,12 +102,26 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
+    if (password.length < 6) {
+      setAccountError('Password must be at least 6 characters long.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const account = await AccountService.createAccount(username, password, companyName);
+      let account: StaffPayAccount;
+      try {
+        // Register in Firebase Cloud Auth
+        account = await FirebaseAuthService.register(username, password, companyName);
+      } catch (cloudErr: any) {
+        console.warn('Firebase registration fallback to local:', cloudErr?.message);
+        account = await AccountService.createAccount(username, password, companyName);
+      }
+
       setActiveAccount(account);
 
-      // Initialize cloud sync for new account
+      // Initialize real-time cloud sync for new account
+      await FirebaseSyncService.initialize();
       await CloudSyncService.initialize();
 
       const hasPin = await AuthService.isPinSet();
@@ -110,6 +136,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleSwitchAccount = async () => {
+    await FirebaseAuthService.logout();
     await AccountService.logout();
     await AccountService.switchAccountClearCache();
     setActiveAccount(null);
@@ -343,9 +370,9 @@ export const LoginPage: React.FC = () => {
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
               <span className="flex items-center gap-1">
                 <Cloud className="w-3.5 h-3.5 text-blue-500" />
-                Google Drive Central Sync
+                Firebase Real-Time Cloud Sync
               </span>
-              <span>Multi-Device Ready</span>
+              <span className="text-emerald-600 font-semibold">Multi-Device Ready</span>
             </div>
           </div>
         ) : isPinSet ? (

@@ -22,6 +22,8 @@ import { BackupService } from '../services/backupService';
 import { SettingsRepository } from '../repositories/settingsRepository';
 import { AccountService } from '../services/accountService';
 import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
+import { FirebaseAuthService } from '../services/firebaseAuthService';
 import { BackupPreviewModal } from '../components/backup/BackupPreviewModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { BackupData, BackupValidationResult, ImportMode, ImportResult } from '../types';
@@ -37,7 +39,7 @@ export const BackupPage: React.FC = () => {
 
   // Cloud Sync state
   const [activeAccount, setActiveAccount] = useState<StaffPayAccount | null>(AccountService.getActiveAccount());
-  const [syncState, setSyncState] = useState<SyncState>(CloudSyncService.getSyncState());
+  const [syncState, setSyncState] = useState<SyncState>(FirebaseSyncService.getSyncState());
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
@@ -62,7 +64,7 @@ export const BackupPage: React.FC = () => {
     loadMeta();
     setActiveAccount(AccountService.getActiveAccount());
 
-    const unsubSync = CloudSyncService.subscribe((state) => {
+    const unsubSync = FirebaseSyncService.subscribe((state) => {
       setSyncState({ ...state });
       setActiveAccount(AccountService.getActiveAccount());
     });
@@ -75,7 +77,7 @@ export const BackupPage: React.FC = () => {
   const handleManualCloudSync = async () => {
     setIsManualSyncing(true);
     try {
-      await CloudSyncService.sync();
+      await Promise.allSettled([FirebaseSyncService.sync(), CloudSyncService.sync()]);
       confetti({
         particleCount: 40,
         spread: 50,
@@ -89,6 +91,7 @@ export const BackupPage: React.FC = () => {
   };
 
   const handleLogoutAccount = async () => {
+    await FirebaseAuthService.logout();
     await AccountService.logout();
     setLogoutConfirmOpen(false);
     navigate('/login');

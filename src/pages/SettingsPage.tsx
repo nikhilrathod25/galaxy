@@ -19,6 +19,8 @@ import { SettingsRepository } from '../repositories/settingsRepository';
 import { AuthService } from '../services/authService';
 import { AccountService } from '../services/accountService';
 import { CloudSyncService } from '../services/cloudSyncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
+import { FirebaseAuthService } from '../services/firebaseAuthService';
 import { seedSampleData } from '../db/seed';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { CompanySettings, SalarySettings, AppPreferences, AuthSettings } from '../types';
@@ -93,7 +95,7 @@ export const SettingsPage: React.FC = () => {
   const handleManualCloudSync = async () => {
     setIsManualSyncing(true);
     try {
-      await CloudSyncService.sync();
+      await Promise.allSettled([FirebaseSyncService.sync(), CloudSyncService.sync()]);
     } catch (err: any) {
       alert(`Cloud sync failed: ${err.message}`);
     } finally {
@@ -102,6 +104,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleLogoutAccount = async () => {
+    await FirebaseAuthService.logout();
     await AccountService.logout();
     setLogoutConfirmOpen(false);
     navigate('/login');
