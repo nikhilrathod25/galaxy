@@ -1,3 +1,5 @@
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { firestore } from './firebase';
 import { StaffPayAccount } from '../types/cloud';
 import { db } from '../db/database';
 
@@ -84,7 +86,7 @@ export class AccountService {
     if (!activeId) return null;
 
     const accounts = this.getAccounts();
-    return accounts.find((a) => a.accountId === activeId) || null;
+    return accounts.find((a) => a.accountId === activeId || a.username === activeId) || null;
   }
 
   /**
@@ -95,7 +97,7 @@ export class AccountService {
   }
 
   /**
-   * Registers a new StaffPay account
+   * Registers a new StaffPay account on Cloud Firestore & locally
    */
   static async createAccount(
     usernameInput: string,
@@ -110,28 +112,60 @@ export class AccountService {
       throw new Error('Password must be at least 6 characters long.');
     }
 
-    const accounts = this.getAccounts();
-    const existing = accounts.find((a) => a.username.toLowerCase() === username);
-    if (existing) {
-      throw new Error(`Account with username "${username}" already exists. Please sign in instead.`);
+    // 1. Check Cloud Firestore if username already exists
+    const userDocRef = doc(firestore, 'users', username);
+    try {
+      const cloudSnap = await getDoc(userDocRef);
+      if (cloudSnap.exists()) {
+        throw new Error(`Username "${username}" is already registered. Please Sign In instead.`);
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('already registered')) {
+        throw err;
+      }
+      console.warn('Cloud pre-check notice:', err);
     }
 
     const salt = this.generateSalt();
     const hash = await this.hashPassword(passwordInput, salt);
     const now = new Date().toISOString();
+    const accountId = `sp_${username}`;
 
     const newAccount: StaffPayAccount = {
-      accountId: this.generateAccountId(),
+      accountId,
       username,
       passwordHash: hash,
       passwordSalt: salt,
       createdAt: now,
       updatedAt: now,
       status: 'active',
-      companyName: companyName?.trim() || 'My Business',
+      companyName: companyName?.trim() || 'StaffPay Business',
     };
 
-    accounts.push(newAccount);
+    // 2. Save directly to Cloud Firestore
+    try {
+      await setDoc(userDocRef, {
+        accountId,
+        username,
+        passwordHash: hash,
+        passwordSalt: salt,
+        companyName: newAccount.companyName,
+        createdAt: now,
+        updatedAt: now,
+        status: 'active',
+      });
+    } catch (cloudWriteErr) {
+      console.warn('Cloud account registration write error:', cloudWriteErr);
+    }
+
+    // 3. Save locally
+    const accounts = this.getAccounts();
+    const existingIndex = accounts.findIndex((a) => a.username === username);
+    if (existingIndex >= 0) {
+      accounts[existingIndex] = newAccount;
+    } else {
+      accounts.push(newAccount);
+    }
     this.saveAccounts(accounts);
     this.setActiveAccount(newAccount);
 
@@ -139,7 +173,7 @@ export class AccountService {
   }
 
   /**
-   * Authenticates a StaffPay account with username + password
+   * Authenticates a StaffPay account with username + password against Cloud Firestore & local cache
    */
   static async authenticate(usernameInput: string, passwordInput: string): Promise<StaffPayAccount> {
     const username = usernameInput.trim().toLowerCase();
@@ -147,27 +181,73 @@ export class AccountService {
       throw new Error('Please enter both username and password.');
     }
 
+    // 1. Attempt Cloud Firestore authentication
+    const userDocRef = doc(firestore, 'users', username);
+    try {
+      const cloudSnap = await getDoc(userDocRef);
+      if (cloudSnap.exists()) {
+        const cloudData = cloudSnap.data();
+        const computedHash = await this.hashPassword(passwordInput, cloudData.passwordSalt);
+        if (computedHash === cloudData.passwordHash) {
+          const account: StaffPayAccount = {
+            accountId: cloudData.accountId || `sp_${username}`,
+            username: cloudData.username || username,
+            passwordHash: cloudData.passwordHash,
+            passwordSalt: cloudData.passwordSalt,
+            createdAt: cloudData.createdAt || new Date().toISOString(),
+            updatedAt: cloudData.updatedAt || new Date().toISOString(),
+            status: 'active',
+            companyName: cloudData.companyName || 'StaffPay Business',
+          };
+
+          // Cache locally
+          const accounts = this.getAccounts();
+          const existingIndex = accounts.findIndex((a) => a.username === username);
+          if (existingIndex >= 0) {
+            accounts[existingIndex] = account;
+          } else {
+            accounts.push(account);
+          }
+          this.saveAccounts(accounts);
+          this.setActiveAccount(account);
+          return account;
+        } else {
+          throw new Error('Incorrect password. Please try again.');
+        }
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Incorrect password')) {
+        throw err;
+      }
+      console.warn('Cloud login check notice:', err);
+    }
+
+    // 2. Fallback to local accounts list
     const accounts = this.getAccounts();
-    let account = accounts.find((a) => a.username.toLowerCase() === username);
+    const localAccount = accounts.find((a) => a.username.toLowerCase() === username);
 
-    // If accounts list is empty on this device, check default admin or allow initial account creation
-    if (!account) {
-      if (accounts.length === 0 && username === 'admin' && passwordInput === 'admin123') {
-        // Auto-seed initial default admin on brand new device
-        return this.createAccount('admin', 'admin123', 'StaffPay Business');
+    if (localAccount && localAccount.passwordSalt && localAccount.passwordHash) {
+      const computedHash = await this.hashPassword(passwordInput, localAccount.passwordSalt);
+      if (computedHash === localAccount.passwordHash) {
+        this.setActiveAccount(localAccount);
+        // Sync to cloud in background
+        setDoc(userDocRef, {
+          accountId: localAccount.accountId,
+          username: localAccount.username,
+          passwordHash: localAccount.passwordHash,
+          passwordSalt: localAccount.passwordSalt,
+          companyName: localAccount.companyName,
+          createdAt: localAccount.createdAt,
+          updatedAt: new Date().toISOString(),
+          status: 'active',
+        }).catch(() => {});
+        return localAccount;
+      } else {
+        throw new Error('Incorrect password. Please try again.');
       }
-      throw new Error('Invalid username or password. If you are new, click "Create Account".');
     }
 
-    if (account.passwordSalt && account.passwordHash) {
-      const computedHash = await this.hashPassword(passwordInput, account.passwordSalt);
-      if (computedHash !== account.passwordHash) {
-        throw new Error('Invalid username or password.');
-      }
-    }
-
-    this.setActiveAccount(account);
-    return account;
+    throw new Error(`Account "${username}" not found. Please click "Create Account" tab to register.`);
   }
 
   /**

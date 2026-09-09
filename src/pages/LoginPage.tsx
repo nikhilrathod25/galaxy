@@ -66,19 +66,11 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      let account: StaffPayAccount;
-      try {
-        // First attempt Firebase Cloud Auth for cross-device login
-        account = await FirebaseAuthService.login(username, password);
-      } catch (cloudErr: any) {
-        // If offline or local credentials exist, fallback to local authentication
-        console.info('Firebase login fallback to local:', cloudErr?.message);
-        account = await AccountService.authenticate(username, password);
-      }
-
+      // Authenticate directly against Cloud Firestore
+      const account = await AccountService.authenticate(username, password);
       setActiveAccount(account);
 
-      // Initialize and await full Firebase Cloud sync so data is ready before opening Dashboard
+      // Download and sync complete cloud database before opening Dashboard
       await FirebaseSyncService.initialize();
       await FirebaseSyncService.sync();
 
@@ -106,18 +98,11 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      let account: StaffPayAccount;
-      try {
-        // Register in Firebase Cloud Auth
-        account = await FirebaseAuthService.register(username, password, companyName);
-      } catch (cloudErr: any) {
-        console.warn('Firebase registration fallback to local:', cloudErr?.message);
-        account = await AccountService.createAccount(username, password, companyName);
-      }
-
+      // Register directly in Cloud Firestore
+      const account = await AccountService.createAccount(username, password, companyName);
       setActiveAccount(account);
 
-      // Initialize and await full cloud sync for new account
+      // Initialize and sync new cloud database
       await FirebaseSyncService.initialize();
       await FirebaseSyncService.sync();
 
