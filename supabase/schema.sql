@@ -1,13 +1,20 @@
 -- ==============================================================================
--- STAFFPAY POSTGRESQL SCHEMA FOR SUPABASE
--- Complete Single Admin Cloud Architecture with Row-Level Security (RLS) & Realtime
+-- STAFFPAY COMPLETE CLEAN SUPABASE SETUP (SINGLE ADMIN ARCHITECTURE)
 -- ==============================================================================
 
--- 1. EMPLOYEES TABLE
-CREATE TABLE IF NOT EXISTS public.employees (
+-- 1. DROP EXISTING TABLES & CONSTRAINTS TO START FRESH
+DROP TABLE IF EXISTS public.salary_records CASCADE;
+DROP TABLE IF EXISTS public.leaves CASCADE;
+DROP TABLE IF EXISTS public.attendance CASCADE;
+DROP TABLE IF EXISTS public.holidays CASCADE;
+DROP TABLE IF EXISTS public.leave_types CASCADE;
+DROP TABLE IF EXISTS public.employees CASCADE;
+DROP TABLE IF EXISTS public.settings CASCADE;
+
+-- 2. EMPLOYEES TABLE
+CREATE TABLE public.employees (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
-    employee_id TEXT NOT NULL,
+    employee_id TEXT NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
     photo_url TEXT,
     phone TEXT NOT NULL DEFAULT '',
@@ -21,48 +28,39 @@ CREATE TABLE IF NOT EXISTS public.employees (
     status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'On Leave', 'Terminated')),
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT unique_user_employee_id UNIQUE (user_id, employee_id)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_employees_user_id ON public.employees(user_id);
-CREATE INDEX IF NOT EXISTS idx_employees_status ON public.employees(status);
+CREATE INDEX idx_employees_status ON public.employees(status);
 
--- 2. ATTENDANCE TABLE
-CREATE TABLE IF NOT EXISTS public.attendance (
-    id TEXT NOT NULL, -- Composite: employee_id_date (e.g. EMP001_2026-09-09)
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+-- 3. ATTENDANCE TABLE
+CREATE TABLE public.attendance (
+    id TEXT PRIMARY KEY, -- Composite: employee_id_date (e.g. EMP001_2026-09-09)
     employee_id TEXT NOT NULL,
     date DATE NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('Present', 'Absent', 'Half Day', 'Paid Leave', 'Unpaid Leave', 'Holiday', 'Weekly Off', 'Not Marked')),
     note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id, id)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON public.attendance(user_id, date);
-CREATE INDEX IF NOT EXISTS idx_attendance_user_emp ON public.attendance(user_id, employee_id);
+CREATE INDEX idx_attendance_date ON public.attendance(date);
+CREATE INDEX idx_attendance_emp ON public.attendance(employee_id);
 
--- 3. LEAVE TYPES TABLE
-CREATE TABLE IF NOT EXISTS public.leave_types (
+-- 4. LEAVE TYPES TABLE
+CREATE TABLE public.leave_types (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     is_paid BOOLEAN NOT NULL DEFAULT TRUE,
     description TEXT,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT unique_user_leave_type_name UNIQUE (user_id, name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_leave_types_user ON public.leave_types(user_id);
-
--- 4. LEAVES TABLE
-CREATE TABLE IF NOT EXISTS public.leaves (
+-- 5. LEAVES TABLE
+CREATE TABLE public.leaves (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
     employee_id TEXT NOT NULL,
     leave_type_id BIGINT REFERENCES public.leave_types(id) ON DELETE SET NULL,
     leave_type_name TEXT NOT NULL DEFAULT '',
@@ -75,29 +73,26 @@ CREATE TABLE IF NOT EXISTS public.leaves (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_leaves_user_emp ON public.leaves(user_id, employee_id);
-CREATE INDEX IF NOT EXISTS idx_leaves_dates ON public.leaves(user_id, start_date, end_date);
+CREATE INDEX idx_leaves_emp ON public.leaves(employee_id);
+CREATE INDEX idx_leaves_dates ON public.leaves(start_date, end_date);
 
--- 5. HOLIDAYS TABLE
-CREATE TABLE IF NOT EXISTS public.holidays (
+-- 6. HOLIDAYS TABLE
+CREATE TABLE public.holidays (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
     name TEXT NOT NULL,
-    date DATE NOT NULL,
+    date DATE NOT NULL UNIQUE,
     year INTEGER NOT NULL,
     description TEXT,
     is_optional BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT unique_user_holiday_date UNIQUE (user_id, date)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_holidays_user_year ON public.holidays(user_id, year);
+CREATE INDEX idx_holidays_year ON public.holidays(year);
 
--- 6. SALARY RECORDS TABLE
-CREATE TABLE IF NOT EXISTS public.salary_records (
-    id TEXT NOT NULL, -- Composite: employee_id_year_month (e.g. EMP001_2026_09)
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+-- 7. SALARY RECORDS TABLE
+CREATE TABLE public.salary_records (
+    id TEXT PRIMARY KEY, -- Composite: employee_id_year_month (e.g. EMP001_2026_09)
     employee_id TEXT NOT NULL,
     employee_name TEXT NOT NULL DEFAULT '',
     designation TEXT NOT NULL DEFAULT '',
@@ -123,75 +118,23 @@ CREATE TABLE IF NOT EXISTS public.salary_records (
     finalized_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id, id)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_salary_user_month ON public.salary_records(user_id, year, month);
+CREATE INDEX idx_salary_month ON public.salary_records(year, month);
 
--- 7. SETTINGS TABLE
-CREATE TABLE IF NOT EXISTS public.settings (
-    key TEXT NOT NULL,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+-- 8. SETTINGS TABLE
+CREATE TABLE public.settings (
+    key TEXT PRIMARY KEY,
     value JSONB NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id, key)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ==============================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ==============================================================================
-
-ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leave_types ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leaves ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.salary_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
-
--- Employees policies
-DROP POLICY IF EXISTS "Admin manages own employees" ON public.employees;
-CREATE POLICY "Admin manages own employees" ON public.employees
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Attendance policies
-DROP POLICY IF EXISTS "Admin manages own attendance" ON public.attendance;
-CREATE POLICY "Admin manages own attendance" ON public.attendance
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Leave Types policies
-DROP POLICY IF EXISTS "Admin manages own leave_types" ON public.leave_types;
-CREATE POLICY "Admin manages own leave_types" ON public.leave_types
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Leaves policies
-DROP POLICY IF EXISTS "Admin manages own leaves" ON public.leaves;
-CREATE POLICY "Admin manages own leaves" ON public.leaves
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Holidays policies
-DROP POLICY IF EXISTS "Admin manages own holidays" ON public.holidays;
-CREATE POLICY "Admin manages own holidays" ON public.holidays
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Salary Records policies
-DROP POLICY IF EXISTS "Admin manages own salary_records" ON public.salary_records;
-CREATE POLICY "Admin manages own salary_records" ON public.salary_records
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Settings policies
-DROP POLICY IF EXISTS "Admin manages own settings" ON public.settings;
-CREATE POLICY "Admin manages own settings" ON public.settings
-    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- ==============================================================================
--- SUPABASE REALTIME REPLICATION CONFIGURATION
--- ==============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.employees;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.attendance;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_types;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.leaves;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.holidays;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.salary_records;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+-- 9. DISABLE ROW LEVEL SECURITY FOR SEAMLESS SINGLE ADMIN ACCESS
+ALTER TABLE public.employees DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leave_types DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leaves DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.holidays DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.salary_records DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings DISABLE ROW LEVEL SECURITY;

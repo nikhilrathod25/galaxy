@@ -118,7 +118,7 @@ export class AttendanceService {
         note: note || null,
         updated_at: now,
       },
-      { onConflict: 'user_id,id' }
+      { onConflict: 'id' }
     );
 
     if (error) {
@@ -157,7 +157,7 @@ export class AttendanceService {
     }
 
     if (toUpsert.length > 0) {
-      const { error } = await supabase.from('attendance').upsert(toUpsert, { onConflict: 'user_id,id' });
+      const { error } = await supabase.from('attendance').upsert(toUpsert, { onConflict: 'id' });
       if (error) {
         console.error('Error bulk updating attendance:', error);
         throw new Error(error.message || 'Failed to save attendance records.');

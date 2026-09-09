@@ -124,7 +124,7 @@ export class SalaryService {
       updated_at: now,
     };
 
-    const { error } = await supabase.from('salary_records').upsert(payload, { onConflict: 'user_id,id' });
+    const { error } = await supabase.from('salary_records').upsert(payload, { onConflict: 'id' });
     if (error) {
       console.error('Error saving finalized salary in Supabase:', error);
       throw new Error(error.message || 'Failed to save salary record.');

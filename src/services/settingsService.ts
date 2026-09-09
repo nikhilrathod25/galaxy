@@ -22,7 +22,7 @@ export class SettingsService {
         value,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'user_id,key' }
+      { onConflict: 'key' }
     );
 
     if (error) {

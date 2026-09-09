@@ -1,62 +1,178 @@
-import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
 export interface AdminUser {
   id: string;
   username: string;
   email: string;
+  user_metadata?: {
+    username?: string;
+    role?: string;
+  };
 }
 
+interface StoredAdminAuth {
+  username: string;
+  salt: string;
+  hash: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+interface AdminSession {
+  id: string;
+  username: string;
+  token: string;
+  loginAt: number;
+}
+
+const SESSION_STORAGE_KEY = 'staffpay_admin_session';
+
+type AuthStateChangeCallback = (event: 'SIGNED_IN' | 'SIGNED_OUT', session: AdminSession | null) => void;
+
 export class AuthService {
-  private static currentUser: User | null = null;
-  private static currentSession: Session | null = null;
+  private static currentUser: AdminUser | null = null;
+  private static currentSession: AdminSession | null = null;
   private static isInitialized = false;
+  private static listeners: Set<AuthStateChangeCallback> = new Set();
 
   /**
-   * Transforms username into a secure internal Supabase Auth email identity
+   * Hashes a password with salt using PBKDF2-SHA256 via Web Crypto API (100,000 iterations)
    */
-  static normalizeUsernameToEmail(username: string): string {
-    const clean = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
-    return `${clean}@staffpay.internal`;
+  private static async hashPassword(password: string, saltHex: string): Promise<string> {
+    const enc = new TextEncoder();
+    const saltBytes = new Uint8Array(
+      saltHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+    );
+
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(password),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveBits']
+    );
+
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt: saltBytes,
+        iterations: 100000,
+        hash: 'SHA-256',
+      },
+      keyMaterial,
+      256
+    );
+
+    return Array.from(new Uint8Array(derivedBits))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 
   /**
-   * Initializes authentication state from Supabase session
+   * Generates a cryptographically secure 16-byte random salt
    */
-  static async initialize(): Promise<User | null> {
+  private static generateSalt(): string {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  /**
+   * Generates a random session token
+   */
+  private static generateToken(): string {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  /**
+   * Fetches the current Admin Auth record stored in Supabase settings table
+   */
+  static async getStoredAdminAuth(): Promise<StoredAdminAuth | null> {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'admin_auth')
+        .maybeSingle();
+
+      if (error || !data || !data.value) {
+        return null;
+      }
+      return data.value as StoredAdminAuth;
+    } catch (e) {
+      console.error('Error fetching admin credentials from Supabase:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Initializes authentication state from local storage and validates session
+   */
+  static async initialize(): Promise<AdminUser | null> {
     if (this.isInitialized && this.currentUser) {
       return this.currentUser;
     }
 
     try {
-      const { data, error } = await supabase.auth.getSession();
-      if (!error && data?.session?.user) {
-        this.currentSession = data.session;
-        this.currentUser = data.session.user;
-      } else {
-        this.currentSession = null;
-        this.currentUser = null;
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY) || sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        const session: AdminSession = JSON.parse(stored);
+        if (session && session.username && session.token) {
+          this.currentSession = session;
+          this.currentUser = {
+            id: session.id || 'admin',
+            username: session.username,
+            email: `${session.username}@staffpay.app`,
+            user_metadata: {
+              username: session.username,
+              role: 'admin',
+            },
+          };
+          this.isInitialized = true;
+          return this.currentUser;
+        }
       }
     } catch (e) {
-      console.warn('Auth initialization notice:', e);
-      this.currentSession = null;
-      this.currentUser = null;
+      console.warn('Session parse notice:', e);
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
     }
 
+    this.currentSession = null;
+    this.currentUser = null;
     this.isInitialized = true;
-    return this.currentUser;
+    return null;
   }
 
   /**
-   * Subscribes to Supabase Auth state changes
+   * Subscribes to Admin Auth state changes
    */
-  static onAuthStateChange(
-    callback: (event: AuthChangeEvent, session: Session | null) => void
-  ) {
-    return supabase.auth.onAuthStateChange((event, session) => {
-      this.currentSession = session;
-      this.currentUser = session?.user || null;
-      callback(event, session);
+  static onAuthStateChange(callback: (event: 'SIGNED_IN' | 'SIGNED_OUT', session: AdminSession | null) => void) {
+    this.listeners.add(callback);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: () => {
+            this.listeners.delete(callback);
+          },
+        },
+      },
+    };
+  }
+
+  private static notifyListeners(event: 'SIGNED_IN' | 'SIGNED_OUT', session: AdminSession | null) {
+    this.listeners.forEach((listener) => {
+      try {
+        listener(event, session);
+      } catch (e) {
+        console.error('Auth state listener error:', e);
+      }
     });
   }
 
@@ -65,107 +181,184 @@ export class AuthService {
    * If the Admin account does not exist in Supabase yet, automatically registers it.
    */
   static async login(usernameInput: string, passwordInput: string): Promise<AdminUser> {
-    const username = usernameInput.trim().toLowerCase();
+    const username = usernameInput.trim();
     if (!username || !passwordInput) {
       throw new Error('Please enter both username and password.');
     }
-    if (passwordInput.length < 6) {
-      throw new Error('Password must be at least 6 characters long.');
+    if (passwordInput.length < 4) {
+      throw new Error('Password must be at least 4 characters long.');
     }
 
-    const email = this.normalizeUsernameToEmail(username);
+    // 1. Fetch admin credentials from Supabase settings table
+    const storedAuth = await this.getStoredAdminAuth();
 
-    // 1. Attempt Sign In
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password: passwordInput,
-    });
-
-    if (!signInError && signInData?.user) {
-      this.currentUser = signInData.user;
-      this.currentSession = signInData.session;
-      return {
-        id: signInData.user.id,
+    if (!storedAuth) {
+      // First time setup: Automatically register this Admin in Supabase PostgreSQL
+      const salt = this.generateSalt();
+      const hash = await this.hashPassword(passwordInput, salt);
+      const newAuth: StoredAdminAuth = {
         username,
-        email,
+        salt,
+        hash,
+        createdAt: new Date().toISOString(),
       };
-    }
 
-    // 2. If user not found / invalid credentials on first attempt, try auto sign-up
-    if (
-      signInError &&
-      (signInError.message.toLowerCase().includes('invalid login credentials') ||
-        signInError.message.toLowerCase().includes('user not found'))
-    ) {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: passwordInput,
-        options: {
-          data: {
-            username,
-            role: 'admin',
-          },
+      const { error } = await supabase.from('settings').upsert(
+        {
+          key: 'admin_auth',
+          value: newAuth,
+          updated_at: new Date().toISOString(),
         },
-      });
+        { onConflict: 'key' }
+      );
 
-      if (!signUpError && signUpData?.user) {
-        // If Supabase auto-confirms or returns session
-        if (signUpData.session) {
-          this.currentUser = signUpData.user;
-          this.currentSession = signUpData.session;
-          return {
-            id: signUpData.user.id,
-            username,
-            email,
-          };
-        }
-
-        // Try immediate login after signup
-        const retry = await supabase.auth.signInWithPassword({
-          email,
-          password: passwordInput,
-        });
-
-        if (!retry.error && retry.data?.user) {
-          this.currentUser = retry.data.user;
-          this.currentSession = retry.data.session;
-          return {
-            id: retry.data.user.id,
-            username,
-            email,
-          };
-        }
+      if (error) {
+        console.error('Error creating admin credentials in Supabase:', error);
+        throw new Error('Failed to initialize Admin credentials in Supabase database.');
       }
 
-      // If signup also failed with "User already registered", it was an incorrect password
-      if (signUpError && signUpError.message.toLowerCase().includes('already registered')) {
-        throw new Error('Incorrect password. Please try again.');
-      }
+      // Establish session
+      const session: AdminSession = {
+        id: 'admin',
+        username,
+        token: this.generateToken(),
+        loginAt: Date.now(),
+      };
+
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+      this.currentSession = session;
+      this.currentUser = {
+        id: 'admin',
+        username,
+        email: `${username}@staffpay.app`,
+        user_metadata: {
+          username,
+          role: 'admin',
+        },
+      };
+
+      this.notifyListeners('SIGNED_IN', session);
+      return this.currentUser;
     }
 
-    throw new Error(signInError?.message || 'Authentication failed. Please check credentials.');
+    // 2. Existing Admin: Verify username
+    if (storedAuth.username.toLowerCase() !== username.toLowerCase()) {
+      throw new Error('Invalid username or password.');
+    }
+
+    // 3. Verify password hash
+    const computedHash = await this.hashPassword(passwordInput, storedAuth.salt);
+    if (computedHash !== storedAuth.hash) {
+      throw new Error('Invalid username or password.');
+    }
+
+    // 4. Successful login: Establish session
+    const session: AdminSession = {
+      id: 'admin',
+      username: storedAuth.username,
+      token: this.generateToken(),
+      loginAt: Date.now(),
+    };
+
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    this.currentSession = session;
+    this.currentUser = {
+      id: 'admin',
+      username: storedAuth.username,
+      email: `${storedAuth.username}@staffpay.app`,
+      user_metadata: {
+        username: storedAuth.username,
+        role: 'admin',
+      },
+    };
+
+    this.notifyListeners('SIGNED_IN', session);
+    return this.currentUser;
   }
 
   /**
-   * Logs out the Admin and terminates the Supabase Auth session
+   * Updates Admin credentials in Supabase settings table
+   */
+  static async updateCredentials(
+    currentPassword: string,
+    newUsername: string,
+    newPassword?: string
+  ): Promise<void> {
+    const storedAuth = await this.getStoredAdminAuth();
+    if (!storedAuth) {
+      throw new Error('No admin account found in cloud database.');
+    }
+
+    const computedHash = await this.hashPassword(currentPassword, storedAuth.salt);
+    if (computedHash !== storedAuth.hash) {
+      throw new Error('Current password does not match.');
+    }
+
+    let finalSalt = storedAuth.salt;
+    let finalHash = storedAuth.hash;
+
+    if (newPassword && newPassword.trim().length >= 4) {
+      finalSalt = this.generateSalt();
+      finalHash = await this.hashPassword(newPassword.trim(), finalSalt);
+    }
+
+    const updatedAuth: StoredAdminAuth = {
+      username: newUsername.trim() || storedAuth.username,
+      salt: finalSalt,
+      hash: finalHash,
+      createdAt: storedAuth.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('settings').upsert(
+      {
+        key: 'admin_auth',
+        value: updatedAuth,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update credentials.');
+    }
+
+    // Update local session
+    if (this.currentSession) {
+      this.currentSession.username = updatedAuth.username;
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(this.currentSession));
+    }
+    if (this.currentUser) {
+      this.currentUser.username = updatedAuth.username;
+      this.currentUser.email = `${updatedAuth.username}@staffpay.app`;
+      if (this.currentUser.user_metadata) {
+        this.currentUser.user_metadata.username = updatedAuth.username;
+      }
+    }
+  }
+
+  /**
+   * Logs out the Admin and terminates the local session
    */
   static async logout(): Promise<void> {
     this.currentUser = null;
     this.currentSession = null;
-    await supabase.auth.signOut();
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    this.notifyListeners('SIGNED_OUT', null);
   }
 
   /**
    * Returns current authenticated user
    */
-  static getCurrentUser(): User | null {
+  static getCurrentUser(): AdminUser | null {
     return this.currentUser;
   }
 
   /**
    * Returns current session
    */
-  static getCurrentSession(): Session | null {
+  static getCurrentSession(): AdminSession | null {
     return this.currentSession;
   }
 
