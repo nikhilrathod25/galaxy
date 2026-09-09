@@ -78,14 +78,11 @@ export const LoginPage: React.FC = () => {
 
       setActiveAccount(account);
 
-      // Initialize Firebase Cloud sync and background sync
+      // Initialize and await full Firebase Cloud sync so data is ready before opening Dashboard
       await FirebaseSyncService.initialize();
-      await CloudSyncService.initialize();
+      await FirebaseSyncService.sync();
 
-      const hasPin = await AuthService.isPinSet();
-      if (!hasPin || AuthService.isSessionUnlocked()) {
-        navigate('/dashboard', { replace: true });
-      }
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setAccountError(err.message || 'Authentication failed. Please check credentials.');
     } finally {
@@ -120,14 +117,11 @@ export const LoginPage: React.FC = () => {
 
       setActiveAccount(account);
 
-      // Initialize real-time cloud sync for new account
+      // Initialize and await full cloud sync for new account
       await FirebaseSyncService.initialize();
-      await CloudSyncService.initialize();
+      await FirebaseSyncService.sync();
 
-      const hasPin = await AuthService.isPinSet();
-      if (!hasPin || AuthService.isSessionUnlocked()) {
-        navigate('/dashboard', { replace: true });
-      }
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setAccountError(err.message || 'Failed to create account.');
     } finally {
