@@ -11,6 +11,7 @@ import {
   Building2,
   Eye,
   Edit2,
+  Trash2,
   Filter,
 } from 'lucide-react';
 import { EmployeeRepository } from '../repositories/employeeRepository';
@@ -18,6 +19,7 @@ import { CSVService } from '../services/csvService';
 import { Employee, EmployeeStatus } from '../types';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { EmptyState } from '../components/common/EmptyState';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { formatINR } from '../utils/currencyUtils';
 import { formatDisplayDate } from '../utils/dateUtils';
 
@@ -26,6 +28,10 @@ export const EmployeesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | EmployeeStatus>('All');
   const [isLoading, setIsLoading] = useState(true);
+
+  // Delete dialog states
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadEmployees = async () => {
     setIsLoading(true);
@@ -64,6 +70,20 @@ export const EmployeesPage: React.FC = () => {
     CSVService.exportEmployees(filteredEmployees);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!employeeToDelete || !employeeToDelete.id) return;
+    setIsDeleting(true);
+    try {
+      await EmployeeRepository.delete(employeeToDelete.id);
+      setEmployeeToDelete(null);
+      await loadEmployees();
+    } catch (err: any) {
+      alert(`Failed to delete employee: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -80,7 +100,7 @@ export const EmployeesPage: React.FC = () => {
             <button
               type="button"
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition-colors shadow-sm cursor-pointer"
             >
               <Download className="w-4 h-4 text-blue-600" />
               <span>Export CSV</span>
@@ -115,7 +135,7 @@ export const EmployeesPage: React.FC = () => {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value as any)}
-            className="text-xs sm:text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs sm:text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="All">All Statuses ({employees.length})</option>
             <option value="Active">Active ({employees.filter(e => e.status === 'Active').length})</option>
@@ -218,17 +238,25 @@ export const EmployeesPage: React.FC = () => {
                         <Link
                           to={`/employees/${emp.id}`}
                           className="p-2 rounded-xl text-blue-600 hover:bg-blue-50 transition-colors"
-                          title="View Profile & History"
+                          title="View Profile & Attendance History"
                         >
                           <Eye className="w-4 h-4" />
                         </Link>
                         <Link
                           to={`/employees/${emp.id}/edit`}
                           className="p-2 rounded-xl text-orange-600 hover:bg-orange-50 transition-colors"
-                          title="Edit Employee"
+                          title="Edit Employee Profile"
                         >
                           <Edit2 className="w-4 h-4" />
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => setEmployeeToDelete(emp)}
+                          className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Delete Employee"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -238,6 +266,18 @@ export const EmployeesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={Boolean(employeeToDelete)}
+        onClose={() => setEmployeeToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Employee"
+        message={`Are you sure you want to permanently delete ${employeeToDelete?.fullName} (${employeeToDelete?.employeeId})? This action cannot be undone.`}
+        confirmLabel="Yes, Delete Employee"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 };
