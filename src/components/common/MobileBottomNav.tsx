@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarCheck, CreditCard, Settings } from 'lucide-react';
+import { Users, CalendarCheck, CreditCard, FileBarChart, Settings } from 'lucide-react';
 
 interface MobileBottomNavProps {
   onLockApp?: () => void;
@@ -8,16 +8,16 @@ interface MobileBottomNavProps {
 }
 
 const navItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Employees', path: '/employees', icon: Users },
   { name: 'Attendance', path: '/attendance', icon: CalendarCheck },
   { name: 'Salary', path: '/salary', icon: CreditCard },
+  { name: 'Reports', path: '/reports', icon: FileBarChart },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = () => {
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
       <div className="flex items-center justify-around">
         {navItems.map(item => {
           const Icon = item.icon;
@@ -36,7 +36,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = () => {
               {({ isActive }) => (
                 <>
                   <div
-                    className={`p-1 rounded-lg transition-colors ${
+                    className={`p-1.5 rounded-xl transition-colors ${
                       isActive ? 'bg-blue-50 text-blue-600' : ''
                     }`}
                   >

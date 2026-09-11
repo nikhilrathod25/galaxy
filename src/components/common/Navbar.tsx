@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Clock, Settings, LogOut, User, ShieldCheck } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Clock, LogOut, User, FileSpreadsheet, Building2, Calculator as CalcIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { SettingsRepository } from '../../repositories/settingsRepository';
 import { AuthService } from '../../services/authService';
-import { formatDisplayDate } from '../../utils/dateUtils';
 import { CompanySettings } from '../../types';
+import { CsvImportExportModal } from './CsvImportExportModal';
+import { CalculatorModal } from './CalculatorModal';
 
 interface NavbarProps {
-  onOpenSidebar: () => void;
+  onOpenSidebar?: () => void;
   onLockApp?: () => void;
   hasPin?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  onOpenSidebar,
-}) => {
+export const Navbar: React.FC<NavbarProps> = () => {
   const navigate = useNavigate();
   const [company, setCompany] = useState<CompanySettings | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [adminEmail, setAdminEmail] = useState<string>('');
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [isCalcModalOpen, setIsCalcModalOpen] = useState(false);
 
   useEffect(() => {
     const loadInfo = async () => {
@@ -32,11 +33,16 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
     loadInfo();
 
-    // Clock
+    // Clock in IST
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        now.toLocaleTimeString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
       );
     };
     updateTime();
@@ -54,66 +60,85 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onOpenSidebar}
-          className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 lg:hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Open navigation menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-
-        <div className="hidden sm:block">
-          <h1 className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <span>{company?.companyName || 'StaffPay'}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-              Online Cloud
-            </span>
-          </h1>
-          <p className="text-[11px] text-slate-500">
-            {formatDisplayDate(new Date().toISOString(), 'EEEE, dd MMMM yyyy')}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Live Clock */}
-        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-mono font-semibold border border-slate-200/60">
-          <Clock className="w-3.5 h-3.5 text-blue-600" />
-          <span>{currentTime}</span>
+    <>
+      <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
+        {/* Left: Brand Logo Icon Only */}
+        <div className="flex items-center gap-3 shrink-0">
+          {company?.logoUrl ? (
+            <img
+              src={company.logoUrl}
+              alt="Logo"
+              className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-sm"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-orange-300 shadow-md shadow-blue-600/20 shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+          )}
         </div>
 
-        {/* Settings Button */}
-        <Link
-          to="/settings"
-          className="p-2 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors"
-          title="Company & App Settings"
-          aria-label="Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </Link>
-
-        {/* Admin Account Badge & Logout */}
-        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200/80"
-            title="Authenticated Admin"
-          >
-            <User className="w-3.5 h-3.5 text-blue-600" />
-            <span className="max-w-[120px] truncate">{adminEmail || 'Admin'}</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Live IST Clock */}
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-mono font-semibold border border-slate-200/60">
+            <Clock className="w-3.5 h-3.5 text-blue-600" />
+            <span>{currentTime} IST</span>
           </div>
+
+          {/* Quick Calculator Header Button */}
           <button
-            onClick={handleLogout}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-            title="Log Out of StaffPay"
-            aria-label="Log Out"
+            type="button"
+            onClick={() => setIsCalcModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+            title="Open Quick Calculator"
           >
-            <LogOut className="w-4 h-4" />
+            <CalcIcon className="w-4 h-4 text-orange-600" />
+            <span className="hidden xs:inline">Calculator</span>
           </button>
+
+          {/* CSV Import/Export Header Button */}
+          <button
+            type="button"
+            onClick={() => setIsCsvModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+            title="Import or Export CSV Data"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+            <span className="hidden xs:inline">Import / Export (CSV)</span>
+            <span className="xs:hidden">CSV</span>
+          </button>
+
+          {/* Admin Account Badge & Logout */}
+          <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 shrink-0">
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200/80"
+              title="Authenticated Admin"
+            >
+              <User className="w-3.5 h-3.5 text-blue-600" />
+              <span className="max-w-[80px] sm:max-w-[120px] truncate">{adminEmail || 'Admin'}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              title="Log Out of StaffPay"
+              aria-label="Log Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Calculator Modal */}
+      <CalculatorModal
+        isOpen={isCalcModalOpen}
+        onClose={() => setIsCalcModalOpen(false)}
+      />
+
+      {/* CSV Import/Export Modal */}
+      <CsvImportExportModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+      />
+    </>
   );
 };

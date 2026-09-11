@@ -25,6 +25,9 @@ export class SalaryService {
       paidLeaveDays: Number(row.paid_leave_days || 0),
       unpaidLeaveDays: Number(row.unpaid_leave_days || 0),
       notMarkedDays: Number(row.not_marked_days || 0),
+      totalOvertimeHours: Number(row.total_overtime_hours || 0),
+      overtimeEarnings: Number(row.overtime_earnings || 0),
+      hourlyOvertimeRate: Number(row.hourly_overtime_rate || 0),
       dailySalary: Number(row.daily_salary || 0),
       absentDeduction: Number(row.absent_deduction || 0),
       halfDayDeduction: Number(row.half_day_deduction || 0),
@@ -95,7 +98,13 @@ export class SalaryService {
     const id = record.id || this.generateId(record.employeeId, record.year, record.month);
     const now = new Date().toISOString();
 
-    const payload = {
+    let baseNotes = record.notes ? record.notes.replace(/\s*\[OT:[\d.]+h.*?\]/gi, '').trim() : '';
+    if (record.totalOvertimeHours && record.totalOvertimeHours > 0) {
+      const otTag = `[OT:${record.totalOvertimeHours}h_RATE:${record.hourlyOvertimeRate || 0}_EARN:${record.overtimeEarnings || 0}]`;
+      baseNotes = baseNotes ? `${baseNotes} ${otTag}` : otTag;
+    }
+
+    const payload: any = {
       id,
       employee_id: record.employeeId,
       employee_name: record.employeeName,
@@ -120,11 +129,11 @@ export class SalaryService {
       final_salary: record.finalSalary,
       is_finalized: true,
       finalized_at: record.finalizedAt || now,
-      notes: record.notes || null,
+      notes: baseNotes || null,
       updated_at: now,
     };
 
-    const { error } = await supabase.from('salary_records').upsert(payload, { onConflict: 'id' });
+    let { error } = await supabase.from('salary_records').upsert(payload, { onConflict: 'id' });
     if (error) {
       console.error('Error saving finalized salary in Supabase:', error);
       throw new Error(error.message || 'Failed to save salary record.');

@@ -89,6 +89,7 @@ export class PDFService {
     doc.text('Attendance & Working Days Summary', margin, y);
 
     y += 3;
+    const otHours = (salary as any).totalOvertimeHours || 0;
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
@@ -104,7 +105,7 @@ export class PDFService {
         cellPadding: 2.5,
         halign: 'center',
       },
-      head: [['Effective Working Days', 'Present', 'Absent', 'Half Days', 'Paid Leave', 'Unpaid Leave']],
+      head: [['Effective Working Days', 'Present', 'Absent', 'Half Days', 'Paid Leave', 'Unpaid Leave', 'Overtime']],
       body: [
         [
           (salary as any).effectiveWorkingDays || salary.calendarDays,
@@ -113,6 +114,7 @@ export class PDFService {
           salary.halfDays,
           salary.paidLeaveDays,
           salary.unpaidLeaveDays,
+          otHours > 0 ? `${otHours} hrs` : '0 hrs',
         ],
       ],
     });
@@ -126,6 +128,63 @@ export class PDFService {
     doc.text('Salary & Deductions Breakdown', margin, y);
 
     y += 3;
+    const otEarnings = (salary as any).overtimeEarnings || 0;
+    const otRate = (salary as any).hourlyOvertimeRate || Math.round(salary.dailySalary / 8);
+    const grossEarnings = salary.monthlySalary + otEarnings;
+
+    const earningsBody: any[] = [
+      [
+        'Basic Monthly Salary',
+        formatINR(salary.monthlySalary, true),
+        `Absent Deduction (${salary.absentDays} days)`,
+        salary.absentDeduction > 0 ? `-${formatINR(salary.absentDeduction, true)}` : '₹0.00',
+      ],
+    ];
+
+    if (otHours > 0) {
+      earningsBody.push([
+        `Overtime (${otHours}h @ ₹${otRate}/hr)`,
+        `+${formatINR(otEarnings, true)}`,
+        `Half Day Deduction (${salary.halfDays} days @ 50%)`,
+        salary.halfDayDeduction > 0 ? `-${formatINR(salary.halfDayDeduction, true)}` : '₹0.00',
+      ]);
+      earningsBody.push([
+        '',
+        '',
+        `Unpaid Leave Deduction (${salary.unpaidLeaveDays} days)`,
+        salary.unpaidLeaveDeduction > 0 ? `-${formatINR(salary.unpaidLeaveDeduction, true)}` : '₹0.00',
+      ]);
+    } else {
+      earningsBody.push([
+        '',
+        '',
+        `Half Day Deduction (${salary.halfDays} days @ 50%)`,
+        salary.halfDayDeduction > 0 ? `-${formatINR(salary.halfDayDeduction, true)}` : '₹0.00',
+      ]);
+      earningsBody.push([
+        '',
+        '',
+        `Unpaid Leave Deduction (${salary.unpaidLeaveDays} days)`,
+        salary.unpaidLeaveDeduction > 0 ? `-${formatINR(salary.unpaidLeaveDeduction, true)}` : '₹0.00',
+      ]);
+    }
+
+    if ((salary as any).customDeduction && (salary as any).customDeduction > 0) {
+      earningsBody.push([
+        '',
+        '',
+        `Advance / Custom Deduction (${(salary as any).notes || 'Adjustment'})`,
+        `-${formatINR((salary as any).customDeduction, true)}`,
+      ]);
+    }
+
+    earningsBody.push([
+      { content: 'Total Gross Earnings', styles: { fontStyle: 'bold' } },
+      { content: formatINR(grossEarnings, true), styles: { fontStyle: 'bold' } },
+      { content: 'Total Deductions', styles: { fontStyle: 'bold', textColor: [220, 38, 38] } },
+      { content: `-${formatINR(salary.totalDeductions, true)}`, styles: { fontStyle: 'bold', textColor: [220, 38, 38] } },
+    ]);
+
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
@@ -141,32 +200,7 @@ export class PDFService {
         cellPadding: 3,
       },
       head: [['Earnings Description', 'Amount', 'Deductions Description', 'Amount']],
-      body: [
-        [
-          'Basic Monthly Salary',
-          formatINR(salary.monthlySalary, true),
-          `Absent Deduction (${salary.absentDays} days)`,
-          salary.absentDeduction > 0 ? `-${formatINR(salary.absentDeduction, true)}` : '₹0.00',
-        ],
-        [
-          '',
-          '',
-          `Half Day Deduction (${salary.halfDays} days @ 50%)`,
-          salary.halfDayDeduction > 0 ? `-${formatINR(salary.halfDayDeduction, true)}` : '₹0.00',
-        ],
-        [
-          '',
-          '',
-          `Unpaid Leave Deduction (${salary.unpaidLeaveDays} days)`,
-          salary.unpaidLeaveDeduction > 0 ? `-${formatINR(salary.unpaidLeaveDeduction, true)}` : '₹0.00',
-        ],
-        [
-          { content: 'Total Earnings', styles: { fontStyle: 'bold' } },
-          { content: formatINR(salary.monthlySalary, true), styles: { fontStyle: 'bold' } },
-          { content: 'Total Deductions', styles: { fontStyle: 'bold', textColor: [220, 38, 38] } },
-          { content: `-${formatINR(salary.totalDeductions, true)}`, styles: { fontStyle: 'bold', textColor: [220, 38, 38] } },
-        ],
-      ],
+      body: earningsBody,
     });
 
     y = (doc as any).lastAutoTable.finalY + 6;

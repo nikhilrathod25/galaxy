@@ -3,6 +3,18 @@ import { Employee, EmployeeStatus } from '../types';
 
 export class EmployeeService {
   private static mapFromDb(row: any): Employee {
+    let rawNotes = row.notes || '';
+    let overtimeRate: number | undefined = row.overtime_rate ? Number(row.overtime_rate) : undefined;
+    
+    if (overtimeRate === undefined && rawNotes) {
+      const otMatch = rawNotes.match(/\[OT_RATE:([\d.]+)\]/i);
+      if (otMatch) {
+        overtimeRate = parseFloat(otMatch[1]);
+      }
+    }
+    // Clean tag from display notes
+    const displayNotes = rawNotes ? rawNotes.replace(/\s*\[OT_RATE:[\d.]+\]/gi, '').trim() : undefined;
+
     return {
       id: Number(row.id),
       employeeId: row.employee_id,
@@ -15,8 +27,9 @@ export class EmployeeService {
       joiningDate: row.joining_date,
       endDate: row.end_date || undefined,
       monthlySalary: Number(row.monthly_salary || 0),
+      overtimeRate: overtimeRate && !isNaN(overtimeRate) ? overtimeRate : undefined,
       status: row.status as EmployeeStatus,
-      notes: row.notes || undefined,
+      notes: displayNotes || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -35,7 +48,16 @@ export class EmployeeService {
     if (data.endDate !== undefined) dbObj.end_date = data.endDate;
     if (data.monthlySalary !== undefined) dbObj.monthly_salary = data.monthlySalary;
     if (data.status !== undefined) dbObj.status = data.status;
-    if (data.notes !== undefined) dbObj.notes = data.notes;
+    
+    let baseNotes = data.notes !== undefined ? (data.notes || '') : '';
+    baseNotes = baseNotes.replace(/\s*\[OT_RATE:[\d.]+\]/gi, '').trim();
+    if (data.overtimeRate !== undefined && data.overtimeRate > 0) {
+      baseNotes = baseNotes ? `${baseNotes} [OT_RATE:${data.overtimeRate}]` : `[OT_RATE:${data.overtimeRate}]`;
+    }
+    if (data.notes !== undefined || data.overtimeRate !== undefined) {
+      dbObj.notes = baseNotes || null;
+    }
+
     dbObj.updated_at = new Date().toISOString();
     return dbObj;
   }

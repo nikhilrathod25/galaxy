@@ -168,37 +168,37 @@ export const EmployeesPage: React.FC = () => {
         />
       ) : (
         <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-sm text-slate-600 border-collapse">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4">Employee</th>
-                  <th className="px-6 py-4">Contact</th>
-                  <th className="px-6 py-4">Joining Date</th>
-                  <th className="px-6 py-4">Monthly Salary</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th className="px-6 py-4 min-w-[240px] whitespace-nowrap">Employee</th>
+                  <th className="px-6 py-4 min-w-[180px] whitespace-nowrap">Contact</th>
+                  <th className="px-6 py-4 min-w-[160px] whitespace-nowrap">Joining Date</th>
+                  <th className="px-6 py-4 min-w-[150px] whitespace-nowrap">Monthly Salary</th>
+                  <th className="px-6 py-4 min-w-[120px] whitespace-nowrap">Status</th>
+                  <th className="px-6 py-4 min-w-[140px] text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredEmployees.map(emp => (
                   <tr key={emp.employeeId} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         {emp.photoUrl ? (
                           <img
                             src={emp.photoUrl}
                             alt={emp.fullName}
-                            className="w-10 h-10 rounded-xl object-cover border border-slate-200"
+                            className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-sm border border-blue-100">
+                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-sm border border-blue-100 shrink-0">
                             {emp.fullName.charAt(0)}
                           </div>
                         )}
-                        <div>
-                          <div className="font-bold text-slate-800">{emp.fullName}</div>
-                          <div className="text-xs text-slate-400 font-mono flex items-center gap-2">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-800 whitespace-nowrap">{emp.fullName}</div>
+                          <div className="text-xs text-slate-400 font-mono flex items-center gap-2 whitespace-nowrap">
                             <span className="text-blue-600 font-bold">{emp.employeeId}</span>
                             <span>•</span>
                             <span className="text-slate-500 font-sans">{emp.designation}</span>
@@ -207,42 +207,42 @@ export const EmployeesPage: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
-                      <div className="text-xs space-y-0.5 font-medium">
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <Phone className="w-3 h-3 text-slate-400" />
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs space-y-0.5 font-medium whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-slate-700 whitespace-nowrap">
+                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                           <span>{emp.phone || '—'}</span>
                         </div>
                         {emp.email && (
-                          <div className="flex items-center gap-1.5 text-slate-400">
-                            <Mail className="w-3 h-3 text-slate-400" />
+                          <div className="flex items-center gap-1.5 text-slate-400 whitespace-nowrap">
+                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
                             <span>{emp.email}</span>
                           </div>
                         )}
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-xs text-slate-600 font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <td className="px-6 py-4 text-xs text-slate-600 font-medium whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{formatDisplayDate(emp.joiningDate, 'dd MMM yyyy')}</span>
                       </div>
                       {emp.endDate && (
-                        <span className="text-[11px] text-rose-500 block mt-0.5 font-semibold">
+                        <span className="text-[11px] text-rose-500 block mt-0.5 font-semibold whitespace-nowrap">
                           Left {formatDisplayDate(emp.endDate, 'dd MMM yyyy')}
                         </span>
                       )}
                     </td>
 
-                    <td className="px-6 py-4 font-bold text-slate-800">
+                    <td className="px-6 py-4 font-bold text-slate-800 whitespace-nowrap">
                       {formatINR(emp.monthlySalary)}
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={emp.status} size="sm" />
                     </td>
 
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1">
                         <Link
                           to={`/employees/${emp.id}`}

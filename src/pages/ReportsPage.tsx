@@ -186,50 +186,50 @@ export const ReportsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto w-full">
           {reportType === 'attendance' ? (
             /* Attendance Matrix */
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full text-left text-xs text-slate-600 border-collapse">
               <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-3.5">Employee</th>
-                  <th className="px-4 py-3.5 text-center">Working Days</th>
-                  <th className="px-4 py-3.5 text-center text-blue-700">Present (P)</th>
-                  <th className="px-4 py-3.5 text-center text-rose-700">Absent (A)</th>
-                  <th className="px-4 py-3.5 text-center text-orange-600">Half Day (HD)</th>
-                  <th className="px-4 py-3.5 text-center text-sky-700">Paid Leave (PL)</th>
-                  <th className="px-4 py-3.5 text-center text-amber-700">Unpaid Leave (UL)</th>
-                  <th className="px-4 py-3.5 text-center text-slate-400">Not Marked</th>
+                  <th className="px-6 py-3.5 min-w-[220px] whitespace-nowrap">Employee</th>
+                  <th className="px-4 py-3.5 text-center min-w-[120px] whitespace-nowrap">Working Days</th>
+                  <th className="px-4 py-3.5 text-center text-blue-700 min-w-[110px] whitespace-nowrap">Present (P)</th>
+                  <th className="px-4 py-3.5 text-center text-rose-700 min-w-[110px] whitespace-nowrap">Absent (A)</th>
+                  <th className="px-4 py-3.5 text-center text-orange-600 min-w-[120px] whitespace-nowrap">Half Day (HD)</th>
+                  <th className="px-4 py-3.5 text-center text-sky-700 min-w-[120px] whitespace-nowrap">Paid Leave (PL)</th>
+                  <th className="px-4 py-3.5 text-center text-amber-700 min-w-[130px] whitespace-nowrap">Unpaid Leave (UL)</th>
+                  <th className="px-4 py-3.5 text-center text-slate-400 min-w-[110px] whitespace-nowrap">Not Marked</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold">
                 {salaryBreakdowns.map(s => (
                   <tr key={s.employeeId} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800">{s.employeeName}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-bold text-slate-800 whitespace-nowrap">{s.employeeName}</div>
+                      <div className="text-[11px] text-slate-400 font-mono whitespace-nowrap">
                         <span className="text-blue-600 font-bold">{s.employeeId}</span> • {s.designation}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-slate-700">
+                    <td className="px-4 py-4 text-center font-bold text-slate-700 whitespace-nowrap">
                       {s.effectiveWorkingDays}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-blue-600">
+                    <td className="px-4 py-4 text-center font-bold text-blue-600 whitespace-nowrap">
                       {s.presentDays}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-rose-600">
+                    <td className="px-4 py-4 text-center font-bold text-rose-600 whitespace-nowrap">
                       {s.absentDays}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-orange-500">
+                    <td className="px-4 py-4 text-center font-bold text-orange-500 whitespace-nowrap">
                       {s.halfDays}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-sky-600">
+                    <td className="px-4 py-4 text-center font-bold text-sky-600 whitespace-nowrap">
                       {s.paidLeaveDays}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-amber-600">
+                    <td className="px-4 py-4 text-center font-bold text-amber-600 whitespace-nowrap">
                       {s.unpaidLeaveDays}
                     </td>
-                    <td className="px-4 py-4 text-center text-slate-400">
+                    <td className="px-4 py-4 text-center text-slate-400 whitespace-nowrap">
                       {s.notMarkedDays}
                     </td>
                   </tr>
@@ -238,45 +238,45 @@ export const ReportsPage: React.FC = () => {
             </table>
           ) : (
             /* Salary Sheet */
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full text-left text-xs text-slate-600 border-collapse">
               <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-3.5">Employee</th>
-                  <th className="px-4 py-3.5">Monthly Base</th>
-                  <th className="px-4 py-3.5">Daily Rate</th>
-                  <th className="px-4 py-3.5">Absent Ded.</th>
-                  <th className="px-4 py-3.5">Half Day Ded.</th>
-                  <th className="px-4 py-3.5">Unpaid Leave Ded.</th>
-                  <th className="px-4 py-3.5 text-rose-600">Total Deductions</th>
-                  <th className="px-6 py-3.5 text-right font-bold text-blue-700">Net Final Salary</th>
+                  <th className="px-6 py-3.5 min-w-[220px] whitespace-nowrap">Employee</th>
+                  <th className="px-4 py-3.5 min-w-[130px] whitespace-nowrap">Monthly Base</th>
+                  <th className="px-4 py-3.5 min-w-[110px] whitespace-nowrap">Daily Rate</th>
+                  <th className="px-4 py-3.5 min-w-[120px] whitespace-nowrap">Absent Ded.</th>
+                  <th className="px-4 py-3.5 min-w-[130px] whitespace-nowrap">Half Day Ded.</th>
+                  <th className="px-4 py-3.5 min-w-[140px] whitespace-nowrap">Unpaid Leave Ded.</th>
+                  <th className="px-4 py-3.5 text-rose-600 min-w-[140px] whitespace-nowrap">Total Deductions</th>
+                  <th className="px-6 py-3.5 text-right font-bold text-blue-700 min-w-[150px] whitespace-nowrap">Net Final Salary</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold">
                 {salaryBreakdowns.map(s => (
                   <tr key={s.employeeId} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800">{s.employeeName}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-bold text-slate-800 whitespace-nowrap">{s.employeeName}</div>
+                      <div className="text-[11px] text-slate-400 font-mono whitespace-nowrap">
                         <span className="text-blue-600 font-bold">{s.employeeId}</span> • {s.designation}
                       </div>
                     </td>
-                    <td className="px-4 py-4 font-bold text-slate-800">
+                    <td className="px-4 py-4 font-bold text-slate-800 whitespace-nowrap">
                       {formatINR(s.monthlySalary)}
                     </td>
-                    <td className="px-4 py-4 text-slate-500">{formatINR(s.dailySalary)}</td>
-                    <td className="px-4 py-4 text-rose-600">
+                    <td className="px-4 py-4 text-slate-500 whitespace-nowrap">{formatINR(s.dailySalary)}</td>
+                    <td className="px-4 py-4 text-rose-600 whitespace-nowrap">
                       {s.absentDeduction > 0 ? `-${formatINR(s.absentDeduction)}` : '₹0'}
                     </td>
-                    <td className="px-4 py-4 text-orange-500">
+                    <td className="px-4 py-4 text-orange-500 whitespace-nowrap">
                       {s.halfDayDeduction > 0 ? `-${formatINR(s.halfDayDeduction)}` : '₹0'}
                     </td>
-                    <td className="px-4 py-4 text-amber-600">
+                    <td className="px-4 py-4 text-amber-600 whitespace-nowrap">
                       {s.unpaidLeaveDeduction > 0 ? `-${formatINR(s.unpaidLeaveDeduction)}` : '₹0'}
                     </td>
-                    <td className="px-4 py-4 font-bold text-rose-700">
+                    <td className="px-4 py-4 font-bold text-rose-700 whitespace-nowrap">
                       {s.totalDeductions > 0 ? `-${formatINR(s.totalDeductions)}` : '₹0'}
                     </td>
-                    <td className="px-6 py-4 text-right font-black text-sm text-blue-700">
+                    <td className="px-6 py-4 text-right font-black text-sm text-blue-700 whitespace-nowrap">
                       {formatINR(s.finalSalary, true)}
                     </td>
                   </tr>

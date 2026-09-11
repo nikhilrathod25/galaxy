@@ -32,6 +32,7 @@ export const EmployeeFormPage: React.FC = () => {
   const [joiningDate, setJoiningDate] = useState(getTodayDateString());
   const [endDate, setEndDate] = useState('');
   const [monthlySalary, setMonthlySalary] = useState<number>(30000);
+  const [overtimeRate, setOvertimeRate] = useState<string>('');
   const [status, setStatus] = useState<EmployeeStatus>('Active');
   const [notes, setNotes] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
@@ -53,6 +54,7 @@ export const EmployeeFormPage: React.FC = () => {
           setJoiningDate(emp.joiningDate);
           setEndDate(emp.endDate || '');
           setMonthlySalary(emp.monthlySalary);
+          setOvertimeRate(emp.overtimeRate !== undefined && emp.overtimeRate > 0 ? String(emp.overtimeRate) : '');
           setStatus(emp.status);
           setNotes(emp.notes || '');
           setPhotoUrl(emp.photoUrl);
@@ -82,11 +84,18 @@ export const EmployeeFormPage: React.FC = () => {
     }
   };
 
+  const capitalizeWords = (str: string) => {
+    return str.replace(/\b\w/g, char => char.toUpperCase());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!fullName.trim()) {
+    const formattedName = capitalizeWords(fullName.trim());
+    const formattedDesignation = capitalizeWords(designation.trim());
+
+    if (!formattedName) {
       setError('Full Name is required.');
       return;
     }
@@ -101,17 +110,19 @@ export const EmployeeFormPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const otRateNum = overtimeRate ? parseFloat(overtimeRate) : undefined;
       if (isEditing && id) {
         await EmployeeRepository.update(parseInt(id, 10), {
           employeeId,
-          fullName: fullName.trim(),
-          designation: designation.trim(),
+          fullName: formattedName,
+          designation: formattedDesignation,
           phone: phone.trim(),
           email: email.trim(),
           address: address.trim(),
           joiningDate,
           endDate: endDate ? endDate : undefined,
           monthlySalary: Number(monthlySalary),
+          overtimeRate: otRateNum && !isNaN(otRateNum) && otRateNum > 0 ? otRateNum : undefined,
           status,
           notes: notes.trim(),
           photoUrl,
@@ -120,14 +131,15 @@ export const EmployeeFormPage: React.FC = () => {
       } else {
         const newId = await EmployeeRepository.create({
           employeeId: employeeId.trim().toUpperCase(),
-          fullName: fullName.trim(),
-          designation: designation.trim(),
+          fullName: formattedName,
+          designation: formattedDesignation,
           phone: phone.trim(),
           email: email.trim(),
           address: address.trim(),
           joiningDate,
           endDate: endDate ? endDate : undefined,
           monthlySalary: Number(monthlySalary),
+          overtimeRate: otRateNum && !isNaN(otRateNum) && otRateNum > 0 ? otRateNum : undefined,
           status,
           notes: notes.trim(),
           photoUrl,
@@ -243,9 +255,9 @@ export const EmployeeFormPage: React.FC = () => {
               type="text"
               required
               value={fullName}
-              onChange={e => setFullName(e.target.value)}
+              onChange={e => setFullName(capitalizeWords(e.target.value))}
               placeholder="e.g. Rahul Sharma"
-              className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
+              className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium capitalize"
             />
           </div>
 
@@ -257,9 +269,9 @@ export const EmployeeFormPage: React.FC = () => {
               type="text"
               required
               value={designation}
-              onChange={e => setDesignation(e.target.value)}
+              onChange={e => setDesignation(capitalizeWords(e.target.value))}
               placeholder="e.g. Senior Software Engineer"
-              className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
+              className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium capitalize"
             />
           </div>
         </div>
@@ -307,7 +319,7 @@ export const EmployeeFormPage: React.FC = () => {
         </div>
 
         {/* Employment & Salary Details in Blue/Orange */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-200">
           <div>
             <label className="block text-xs font-bold text-blue-950 mb-1.5">
               Monthly Base Salary (₹) <span className="text-rose-500">*</span>
@@ -326,6 +338,29 @@ export const EmployeeFormPage: React.FC = () => {
                 className="w-full pl-8 pr-4 py-2.5 text-sm font-black text-blue-900 bg-white border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-blue-950 mb-1.5">
+              Overtime Rate (₹ / Hour)
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-orange-500">
+                ₹
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="10"
+                placeholder="Auto (Salary ÷ 8h)"
+                value={overtimeRate}
+                onChange={e => setOvertimeRate(e.target.value)}
+                className="w-full pl-8 pr-4 py-2.5 text-sm font-black text-blue-900 bg-white border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-normal"
+              />
+            </div>
+            <p className="text-[10px] text-blue-700/80 mt-1 font-medium">
+              Optional (Tarika 1: Custom ₹/hr)
+            </p>
           </div>
 
           <div>

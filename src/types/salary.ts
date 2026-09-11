@@ -39,6 +39,9 @@ export interface MonthlySalaryBreakdown {
   
   // Financials
   dailySalary: number;
+  hourlyOvertimeRate: number; // Rate per hour used for overtime calculation
+  totalOvertimeHours: number; // Sum of extra hours worked in month
+  overtimeEarnings: number; // totalOvertimeHours * hourlyOvertimeRate
   absentDeduction: number;
   halfDayDeduction: number;
   unpaidLeaveDeduction: number;
@@ -68,6 +71,9 @@ export interface FinalizedSalaryRecord {
   paidLeaveDays: number;
   unpaidLeaveDays: number;
   notMarkedDays: number;
+  totalOvertimeHours?: number;
+  overtimeEarnings?: number;
+  hourlyOvertimeRate?: number;
   
   dailySalary: number;
   absentDeduction: number;

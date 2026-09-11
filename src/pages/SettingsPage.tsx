@@ -82,12 +82,12 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="w-full space-y-6 pb-12">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings & Cloud Management</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings & Preferences</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Manage your business profile, salary calculation rules, and Supabase cloud connection.
+          Manage your business profile, official credentials, and salary calculation rules.
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export const SettingsPage: React.FC = () => {
       {saveSuccess && (
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2 shadow-xs animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>All company settings saved successfully to Supabase PostgreSQL cloud!</span>
+          <span>All company settings saved successfully!</span>
         </div>
       )}
       {saveError && (
@@ -104,23 +104,23 @@ export const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Supabase Cloud & Admin Account Overview */}
+      {/* 1. Admin Account Overview */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-              <Cloud className="w-5 h-5" />
+              <User className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Supabase Cloud Database</h2>
-              <p className="text-xs text-slate-500">Centralized single-admin cloud persistence & real-time sync</p>
+              <h2 className="text-base font-bold text-slate-900">Administrator Account</h2>
+              <p className="text-xs text-slate-500">Active session and authentication profile</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Connected
+              Active
             </span>
           </div>
         </div>
@@ -136,10 +136,10 @@ export const SettingsPage: React.FC = () => {
 
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-              <Database className="w-3.5 h-3.5 text-blue-600" />
-              <span>Database Engine</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Security Access</span>
             </div>
-            <div className="text-sm font-bold text-slate-900">PostgreSQL (Row Level Security Active)</div>
+            <div className="text-sm font-bold text-slate-900">Master Administrator</div>
           </div>
         </div>
 
@@ -339,7 +339,7 @@ export const SettingsPage: React.FC = () => {
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Saving to Cloud...' : 'Save Settings to Supabase'}</span>
+            <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>
       </form>
@@ -348,7 +348,7 @@ export const SettingsPage: React.FC = () => {
       <ConfirmDialog
         isOpen={logoutConfirmOpen}
         title="Sign Out of StaffPay Admin?"
-        message="Your data remains safely stored in the Supabase PostgreSQL cloud database. You can sign back in from any device anytime."
+        message="Your data is saved securely. You can sign back in from any device anytime."
         confirmLabel="Sign Out"
         variant="danger"
         onConfirm={handleLogoutAccount}

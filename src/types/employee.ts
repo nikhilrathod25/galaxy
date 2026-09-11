@@ -12,6 +12,7 @@ export interface Employee {
   joiningDate: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD (optional, if resigned/terminated)
   monthlySalary: number; // Base monthly salary in INR (e.g. 30000)
+  overtimeRate?: number; // Custom Overtime Rate in INR per hour (e.g. 150)
   status: EmployeeStatus;
   notes?: string;
   createdAt: string; // ISO string

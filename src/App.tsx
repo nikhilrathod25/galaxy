@@ -72,7 +72,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-slate-500 font-semibold">Loading StaffPay Cloud...</p>
+          <p className="text-xs text-slate-500 font-semibold">Loading StaffPay...</p>
         </div>
       </div>
     );
@@ -116,14 +116,8 @@ export const App: React.FC = () => {
         <Route path="/setup" element={<LoginPage />} />
 
         {/* Authenticated Cloud Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <MainLayout>
-              <DashboardPage />
-            </MainLayout>
-          }
-        />
+        <Route path="/dashboard" element={<Navigate to="/employees" replace />} />
+        <Route path="/backup" element={<Navigate to="/settings" replace />} />
 
         <Route
           path="/employees"
@@ -185,28 +179,10 @@ export const App: React.FC = () => {
         />
 
         <Route
-          path="/holidays"
-          element={
-            <MainLayout>
-              <HolidaysPage />
-            </MainLayout>
-          }
-        />
-
-        <Route
           path="/reports"
           element={
             <MainLayout>
               <ReportsPage />
-            </MainLayout>
-          }
-        />
-
-        <Route
-          path="/backup"
-          element={
-            <MainLayout>
-              <BackupPage />
             </MainLayout>
           }
         />
@@ -220,8 +196,8 @@ export const App: React.FC = () => {
           }
         />
 
-        {/* Default Redirect to Dashboard */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Default Redirect to Employees */}
+        <Route path="*" element={<Navigate to="/employees" replace />} />
       </Routes>
     </Router>
   );

@@ -30,7 +30,7 @@ import {
   SalaryCalculationMode,
 } from '../types';
 import { formatINR } from '../utils/currencyUtils';
-import { formatMonthYear } from '../utils/dateUtils';
+import { formatMonthYear, getDatesInMonth } from '../utils/dateUtils';
 
 export const SalaryPage: React.FC = () => {
   const now = new Date();
@@ -156,6 +156,9 @@ export const SalaryPage: React.FC = () => {
         paidLeaveDays: s.paidLeaveDays,
         unpaidLeaveDays: s.unpaidLeaveDays,
         notMarkedDays: s.notMarkedDays,
+        totalOvertimeHours: (s as any).totalOvertimeHours || 0,
+        overtimeEarnings: (s as any).overtimeEarnings || 0,
+        hourlyOvertimeRate: (s as any).hourlyOvertimeRate || 0,
         dailySalary: s.dailySalary,
         absentDeduction: s.absentDeduction,
         halfDayDeduction: s.halfDayDeduction,
@@ -173,6 +176,82 @@ export const SalaryPage: React.FC = () => {
     const updatedFinalized = await SalaryRepository.getByMonth(year, month);
     setFinalizedRecords(updatedFinalized);
     setFinalizeModalOpen(false);
+  };
+
+  // Month eligibility for finalization (only past months OR on/after last day of current month)
+  const isMonthEligibleToFinalize = useMemo(() => {
+    const today = new Date();
+    const curYear = today.getFullYear();
+    const curMonth = today.getMonth() + 1;
+    const curDay = today.getDate();
+
+    if (year < curYear) return true;
+    if (year === curYear && month < curMonth) return true;
+    if (year === curYear && month === curMonth) {
+      const datesInM = getDatesInMonth(year, month);
+      return curDay >= datesInM.length;
+    }
+    return false;
+  }, [year, month]);
+
+  const handleFinalizeSingle = async (s: FinalizedSalaryRecord | MonthlySalaryBreakdown) => {
+    const isCurrentlyFinal = s.isFinalized;
+    const nowIso = new Date().toISOString();
+    const recordId = `${s.employeeId}_${year}_${String(month).padStart(2, '0')}`;
+
+    if (isCurrentlyFinal) {
+      if (window.confirm(`Unlock / unfinalize salary record for ${s.employeeName} for ${formatMonthYear(year, month)}?`)) {
+        await SalaryRepository.delete(recordId);
+        const updatedFinalized = await SalaryRepository.getByMonth(year, month);
+        setFinalizedRecords(updatedFinalized);
+      }
+      return;
+    }
+
+    if (!isMonthEligibleToFinalize) {
+      const totalDays = getDatesInMonth(year, month).length;
+      alert(`Finalize option mahine ke aakhri din (${totalDays} ${formatMonthYear(year, month)}) ko hi active hoga, taaki pure mahine ki attendance complete hone ke baad hi salary lock ki ja sake.`);
+      return;
+    }
+
+    if (!window.confirm(`Finalize & lock salary for ${s.employeeName} (₹${s.finalSalary.toLocaleString('en-IN')}) for ${formatMonthYear(year, month)}?`)) {
+      return;
+    }
+
+    const record: FinalizedSalaryRecord = {
+      id: recordId,
+      employeeId: s.employeeId,
+      employeeName: s.employeeName,
+      designation: s.designation,
+      year,
+      month,
+      monthlySalary: s.monthlySalary,
+      calculationMode: s.calculationMode,
+      calendarDays: s.calendarDays,
+      effectiveWorkingDays: s.effectiveWorkingDays,
+      presentDays: s.presentDays,
+      absentDays: s.absentDays,
+      halfDays: s.halfDays,
+      paidLeaveDays: s.paidLeaveDays,
+      unpaidLeaveDays: s.unpaidLeaveDays,
+      notMarkedDays: s.notMarkedDays,
+      totalOvertimeHours: (s as any).totalOvertimeHours || 0,
+      overtimeEarnings: (s as any).overtimeEarnings || 0,
+      hourlyOvertimeRate: (s as any).hourlyOvertimeRate || 0,
+      dailySalary: s.dailySalary,
+      absentDeduction: s.absentDeduction,
+      halfDayDeduction: s.halfDayDeduction,
+      unpaidLeaveDeduction: s.unpaidLeaveDeduction,
+      totalDeductions: s.totalDeductions,
+      finalSalary: s.finalSalary,
+      isFinalized: true,
+      finalizedAt: nowIso,
+      notes: 'Individual employee finalization',
+      updatedAt: nowIso,
+    };
+    await SalaryRepository.saveFinalizedRecord(record);
+    const updatedFinalized = await SalaryRepository.getByMonth(year, month);
+    setFinalizedRecords(updatedFinalized);
   };
 
   const handleExportCSV = () => {
@@ -218,8 +297,24 @@ export const SalaryPage: React.FC = () => {
           {/* Finalize Month Action */}
           <button
             type="button"
-            onClick={() => setFinalizeModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-all shadow-xs shadow-orange-500/20 active:scale-95 cursor-pointer"
+            onClick={() => {
+              if (!isMonthEligibleToFinalize) {
+                const totalDays = getDatesInMonth(year, month).length;
+                alert(`Finalize option mahine ke aakhri din (${totalDays} ${formatMonthYear(year, month)}) ko hi active hoga, taaki pure mahine ki attendance complete hone ke baad hi payroll lock ki ja sake.`);
+                return;
+              }
+              setFinalizeModalOpen(true);
+            }}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer ${
+              isMonthEligibleToFinalize
+                ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20'
+                : 'bg-slate-100 text-slate-400 border border-slate-200'
+            }`}
+            title={
+              isMonthEligibleToFinalize
+                ? 'Finalize Month Payroll'
+                : `Unlocks on last day of month (${getDatesInMonth(year, month).length} ${formatMonthYear(year, month)})`
+            }
           >
             <Lock className="w-3.5 h-3.5" />
             <span>Finalize Month</span>
@@ -268,46 +363,7 @@ export const SalaryPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Total Base Payroll
-          </span>
-          <div className="text-2xl font-black text-slate-900 mt-1">
-            {formatINR(summary.grossTotal)}
-          </div>
-          <span className="text-xs text-slate-500 mt-1 block font-medium">
-            {employees.length} Registered Staff
-          </span>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold uppercase tracking-wider text-rose-600">
-            Total Deductions
-          </span>
-          <div className="text-2xl font-black text-rose-600 mt-1">
-            -{formatINR(summary.deductionTotal)}
-          </div>
-          <span className="text-xs text-slate-500 mt-1 block font-medium">
-            Absent & half-day deductions
-          </span>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-blue-600 text-white shadow-xs border border-blue-700">
-          <span className="text-xs font-bold uppercase tracking-wider text-orange-200">
-            Net Payable Payroll
-          </span>
-          <div className="text-2xl font-black text-white mt-1">
-            {formatINR(summary.netTotal, true)}
-          </div>
-          <span className="text-xs text-blue-100 mt-1 block font-semibold">
-            {summary.finalizedCount} / {employees.length} Finalized
-          </span>
-        </div>
-      </div>
-
-      {/* Compact Staff Payroll Table / Roster (No massive scrolling!) */}
+      {/* Compact Staff Payroll Table / Roster */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -320,17 +376,17 @@ export const SalaryPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-sm text-slate-600 border-collapse">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
               <tr>
-                <th className="px-5 py-3.5">Employee</th>
-                <th className="px-5 py-3.5">Base Salary</th>
-                <th className="px-5 py-3.5">Attendance Summary</th>
-                <th className="px-5 py-3.5">Deductions</th>
-                <th className="px-5 py-3.5">Net Payable</th>
-                <th className="px-5 py-3.5">Status</th>
-                <th className="px-5 py-3.5 text-right">Action</th>
+                <th className="px-5 py-3.5 min-w-[220px] whitespace-nowrap">Employee</th>
+                <th className="px-5 py-3.5 min-w-[140px] whitespace-nowrap">Base Salary</th>
+                <th className="px-5 py-3.5 min-w-[190px] whitespace-nowrap">Attendance Summary</th>
+                <th className="px-5 py-3.5 min-w-[140px] whitespace-nowrap">Deductions</th>
+                <th className="px-5 py-3.5 min-w-[150px] whitespace-nowrap">Net Payable</th>
+                <th className="px-5 py-3.5 min-w-[120px] whitespace-nowrap">Status</th>
+                <th className="px-5 py-3.5 min-w-[200px] text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -338,81 +394,121 @@ export const SalaryPage: React.FC = () => {
                 const isFinal = salary.isFinalized;
                 return (
                   <tr key={salary.employeeId} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 font-black flex items-center justify-center text-sm border border-blue-200">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 font-black flex items-center justify-center text-sm border border-blue-200 shrink-0">
                           {salary.employeeName.charAt(0)}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{salary.employeeName}</div>
-                          <div className="text-xs text-slate-400 font-mono">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 whitespace-nowrap">{salary.employeeName}</div>
+                          <div className="text-xs text-slate-400 font-mono whitespace-nowrap">
                             {salary.employeeId} • {salary.designation}
                           </div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 font-semibold text-slate-800">
+                    <td className="px-5 py-4 font-semibold text-slate-800 whitespace-nowrap">
                       {formatINR(salary.monthlySalary)}
                     </td>
 
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold">
-                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0">
                           {salary.presentDays}P
                         </span>
                         {salary.absentDays > 0 && (
-                          <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
                             {salary.absentDays}A
                           </span>
                         )}
                         {salary.halfDays > 0 && (
-                          <span className="px-2 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
+                          <span className="px-2 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap shrink-0">
                             {salary.halfDays}HD
                           </span>
                         )}
                         {salary.paidLeaveDays > 0 && (
-                          <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
+                          <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap shrink-0">
                             {salary.paidLeaveDays}PL
+                          </span>
+                        )}
+                        {Boolean((salary as any).totalOvertimeHours && (salary as any).totalOvertimeHours > 0) && (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-bold whitespace-nowrap shrink-0">
+                            +{(salary as any).totalOvertimeHours}h OT
                           </span>
                         )}
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 font-bold text-rose-600">
+                    <td className="px-5 py-4 font-bold text-rose-600 whitespace-nowrap">
                       {salary.totalDeductions > 0
                         ? `-${formatINR(salary.totalDeductions)}`
                         : '₹0'}
                     </td>
 
-                    <td className="px-5 py-4">
-                      <span className="text-base font-black text-blue-700">
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <span className="text-base font-black text-blue-700 whitespace-nowrap">
                         {formatINR(salary.finalSalary, true)}
                       </span>
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       {isFinal ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                           <CheckCircle2 className="w-3 h-3" />
                           <span>Finalized</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
                           <span>Draft</span>
                         </span>
                       )}
                     </td>
 
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSlip(salary)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs shadow-blue-600/20 active:scale-95 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-orange-300" />
-                        <span>View Payslip</span>
-                      </button>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {/* Per-Employee Finalize Lock Badge Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleFinalizeSingle(salary)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap shrink-0 border ${
+                            isFinal
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                              : isMonthEligibleToFinalize
+                              ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-500 hover:text-white group/lock'
+                              : 'bg-slate-100 text-slate-400 border-slate-200'
+                          }`}
+                          title={
+                            isFinal
+                              ? 'Salary Locked (Click to Unlock)'
+                              : isMonthEligibleToFinalize
+                              ? 'Finalize & Lock Salary for this employee'
+                              : `Unlocks on last day of month (${getDatesInMonth(year, month).length} ${formatMonthYear(year, month)})`
+                          }
+                        >
+                          {isFinal ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          ) : (
+                            <Lock
+                              className={`w-3.5 h-3.5 shrink-0 ${
+                                isMonthEligibleToFinalize ? 'text-amber-600 group-hover/lock:text-white' : 'text-slate-400'
+                              }`}
+                            />
+                          )}
+                          <span className="whitespace-nowrap">{isFinal ? 'Locked' : 'Finalize'}</span>
+                        </button>
+
+                        {/* View Payslip Light Badge Button */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSlip(salary)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50/70 hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap shrink-0 group/btn"
+                          title="View Payslip & Breakdown"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-blue-600 group-hover/btn:text-white shrink-0" />
+                          <span className="whitespace-nowrap">View Slip</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -429,6 +525,10 @@ export const SalaryPage: React.FC = () => {
           onClose={() => setSelectedSlip(null)}
           salary={selectedSlip}
           company={company}
+          onSalaryUpdated={async () => {
+            const updatedFinalized = await SalaryRepository.getByMonth(year, month);
+            setFinalizedRecords(updatedFinalized);
+          }}
         />
       )}
 

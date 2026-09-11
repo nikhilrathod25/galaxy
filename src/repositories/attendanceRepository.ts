@@ -30,13 +30,14 @@ export class AttendanceRepository {
     employeeId: string,
     date: string,
     status: AttendanceStatus,
-    note?: string
+    note?: string,
+    overtimeHours?: number
   ): Promise<string> {
-    return AttendanceService.setStatus(employeeId, date, status, note);
+    return AttendanceService.setStatus(employeeId, date, status, note, overtimeHours);
   }
 
   static async bulkSetStatus(
-    records: Array<{ employeeId: string; date: string; status: AttendanceStatus; note?: string }>
+    records: Array<{ employeeId: string; date: string; status: AttendanceStatus; note?: string; overtimeHours?: number }>
   ): Promise<void> {
     return AttendanceService.bulkSetStatus(records);
   }

@@ -15,10 +15,45 @@ import {
 } from 'date-fns';
 
 /**
- * Returns today's date string in YYYY-MM-DD
+ * Returns today's date string in IST (Indian Standard Time Asia/Kolkata) YYYY-MM-DD
+ */
+export function getISTDateString(): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(new Date()); // Formats as YYYY-MM-DD
+  } catch {
+    return format(new Date(), 'yyyy-MM-dd');
+  }
+}
+
+/**
+ * Returns today's date string in YYYY-MM-DD (Defaults to IST)
  */
 export function getTodayDateString(): string {
-  return format(new Date(), 'yyyy-MM-dd');
+  return getISTDateString();
+}
+
+/**
+ * Formats a date string to Indian format "DD/MM/YYYY"
+ */
+export function formatIndianDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    const d = parseISO(dateStr);
+    if (isValid(d)) return format(d, 'dd/MM/yyyy');
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
 }
 
 /**
@@ -62,7 +97,26 @@ export function getDatesInMonth(year: number, month: number): string[] {
 }
 
 /**
- * Checks if a date string is a Sunday (Day 0)
+ * Checks if a date is a Thursday (Day 4 - Official Weekly Off)
+ */
+export function isThursday(dateStr: string): boolean {
+  try {
+    const d = parseISO(dateStr);
+    return getDay(d) === 4;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Checks if a date is weekly off (Thursday is the only weekly off)
+ */
+export function isWeeklyOff(dateStr: string): boolean {
+  return isThursday(dateStr);
+}
+
+/**
+ * Checks if a date string is a Sunday (Day 0) - Note: Sunday is a working day
  */
 export function isSunday(dateStr: string): boolean {
   try {
@@ -74,7 +128,7 @@ export function isSunday(dateStr: string): boolean {
 }
 
 /**
- * Checks if a date is a Saturday (Day 6)
+ * Checks if a date is a Saturday (Day 6) - Note: Saturday is a working day
  */
 export function isSaturday(dateStr: string): boolean {
   try {

@@ -7,12 +7,24 @@ export class AttendanceService {
   }
 
   private static mapFromDb(row: any): AttendanceRecord {
+    let rawNote = row.note || '';
+    let overtimeHours: number | undefined = row.overtime_hours ? Number(row.overtime_hours) : undefined;
+
+    if (overtimeHours === undefined && rawNote) {
+      const otMatch = rawNote.match(/\[OT:([\d.]+)h\]/i);
+      if (otMatch) {
+        overtimeHours = parseFloat(otMatch[1]);
+      }
+    }
+    const displayNote = rawNote ? rawNote.replace(/\s*\[OT:[\d.]+h\]/gi, '').trim() : undefined;
+
     return {
       id: row.id,
       employeeId: row.employee_id,
       date: row.date,
       status: row.status as AttendanceStatus,
-      note: row.note || undefined,
+      overtimeHours: overtimeHours && !isNaN(overtimeHours) && overtimeHours > 0 ? overtimeHours : undefined,
+      note: displayNote || undefined,
       updatedAt: row.updated_at,
     };
   }
@@ -99,7 +111,8 @@ export class AttendanceService {
     employeeId: string,
     date: string,
     status: AttendanceStatus,
-    note?: string
+    note?: string,
+    overtimeHours?: number
   ): Promise<string> {
     const id = this.generateId(employeeId, date);
     const now = new Date().toISOString();
@@ -109,17 +122,33 @@ export class AttendanceService {
       return id;
     }
 
-    const { error } = await supabase.from('attendance').upsert(
-      {
-        id,
-        employee_id: employeeId,
-        date,
-        status,
-        note: note || null,
-        updated_at: now,
-      },
+    let baseNote = note ? note.replace(/\s*\[OT:[\d.]+h\]/gi, '').trim() : '';
+    if (overtimeHours && overtimeHours > 0) {
+      baseNote = baseNote ? `${baseNote} [OT:${overtimeHours}h]` : `[OT:${overtimeHours}h]`;
+    }
+
+    const payload: any = {
+      id,
+      employee_id: employeeId,
+      date,
+      status,
+      note: baseNote || null,
+      updated_at: now,
+    };
+    if (overtimeHours !== undefined) {
+      payload.overtime_hours = overtimeHours;
+    }
+
+    let { error } = await supabase.from('attendance').upsert(
+      payload,
       { onConflict: 'id' }
     );
+
+    if (error && (error.message?.includes('overtime_hours') || error.code === 'PGRST204')) {
+      delete payload.overtime_hours;
+      const retry = await supabase.from('attendance').upsert(payload, { onConflict: 'id' });
+      error = retry.error;
+    }
 
     if (error) {
       console.error('Error setting attendance in Supabase:', error);
@@ -130,7 +159,7 @@ export class AttendanceService {
   }
 
   static async bulkSetStatus(
-    records: Array<{ employeeId: string; date: string; status: AttendanceStatus; note?: string }>
+    records: Array<{ employeeId: string; date: string; status: AttendanceStatus; note?: string; overtimeHours?: number }>
   ): Promise<void> {
     const now = new Date().toISOString();
     const toUpsert: any[] = [];
@@ -141,14 +170,23 @@ export class AttendanceService {
       if (r.status === 'Not Marked') {
         toDeleteIds.push(id);
       } else {
-        toUpsert.push({
+        let baseNote = r.note ? r.note.replace(/\s*\[OT:[\d.]+h\]/gi, '').trim() : '';
+        if (r.overtimeHours && r.overtimeHours > 0) {
+          baseNote = baseNote ? `${baseNote} [OT:${r.overtimeHours}h]` : `[OT:${r.overtimeHours}h]`;
+        }
+
+        const payload: any = {
           id,
           employee_id: r.employeeId,
           date: r.date,
           status: r.status,
-          note: r.note || null,
+          note: baseNote || null,
           updated_at: now,
-        });
+        };
+        if (r.overtimeHours !== undefined) {
+          payload.overtime_hours = r.overtimeHours;
+        }
+        toUpsert.push(payload);
       }
     }
 
@@ -157,7 +195,12 @@ export class AttendanceService {
     }
 
     if (toUpsert.length > 0) {
-      const { error } = await supabase.from('attendance').upsert(toUpsert, { onConflict: 'id' });
+      let { error } = await supabase.from('attendance').upsert(toUpsert, { onConflict: 'id' });
+      if (error && (error.message?.includes('overtime_hours') || error.code === 'PGRST204')) {
+        toUpsert.forEach(p => delete p.overtime_hours);
+        const retry = await supabase.from('attendance').upsert(toUpsert, { onConflict: 'id' });
+        error = retry.error;
+      }
       if (error) {
         console.error('Error bulk updating attendance:', error);
         throw new Error(error.message || 'Failed to save attendance records.');

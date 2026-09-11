@@ -8,7 +8,7 @@ import {
 } from '../types';
 import {
   getDatesInMonth,
-  isSunday,
+  isWeeklyOff,
   isDateStrictlyBefore,
   isDateStrictlyAfter,
   getTodayDateString,
@@ -53,7 +53,7 @@ export function calculateMonthlySalary(input: SalaryCalculationInput): MonthlySa
   let weekendDays = 0;
 
   for (const dateStr of datesInMonth) {
-    const isSun = isSunday(dateStr);
+    const isOff = isWeeklyOff(dateStr); // Thursday is the only weekly off day
     const isHoliday = holidayDateSet.has(dateStr);
 
     // Is date within employee's active tenure?
@@ -61,8 +61,8 @@ export function calculateMonthlySalary(input: SalaryCalculationInput): MonthlySa
     const isAfterExit = endDate ? isDateStrictlyAfter(dateStr, endDate) : false;
     const isWithinTenure = !isBeforeJoin && !isAfterExit;
 
-    // Check baseline working day for the month (standard Mon-Sat excluding holidays)
-    const isGeneralWorkingDay = !isSun && !isHoliday;
+    // Check baseline working day for the month (working days excluding Thursday and holidays)
+    const isGeneralWorkingDay = !isOff && !isHoliday;
     if (isGeneralWorkingDay) {
       totalWorkingDaysInMonth++;
     }
@@ -72,22 +72,16 @@ export function calculateMonthlySalary(input: SalaryCalculationInput): MonthlySa
       continue;
     }
 
-    if (isSun) {
-      weekendDays++;
-      continue;
-    }
-
-    if (isHoliday) {
-      holidayDays++;
-      continue;
-    }
-
-    // This day is an effective working day for this employee
-    effectiveWorkingDays++;
-
-    // Evaluate attendance record for this working day
     const record = attendanceMap.get(dateStr);
-    const status = record ? record.status : 'Not Marked';
+    const hasExplicitStatus = record && record.status && record.status !== 'Not Marked';
+    const status = hasExplicitStatus ? record.status : isOff ? 'Thursday Off' : isHoliday ? 'Holiday' : 'Not Marked';
+
+    // Count effective working day
+    if (!isOff && !isHoliday) {
+      effectiveWorkingDays++;
+    } else if (status === 'Present' || status === 'Half Day') {
+      effectiveWorkingDays++;
+    }
 
     switch (status) {
       case 'Present':
@@ -105,41 +99,55 @@ export function calculateMonthlySalary(input: SalaryCalculationInput): MonthlySa
       case 'Unpaid Leave':
         unpaidLeaveDays++;
         break;
+      case 'Thursday Off':
+        weekendDays++;
+        break;
+      case 'Holiday':
+        holidayDays++;
+        break;
       case 'Not Marked':
       default:
-        // Not Marked days NEVER count as absent and never trigger deductions!
         notMarkedDays++;
         break;
     }
   }
 
   // Base calculation unit
-  // If working_days mode: use totalWorkingDaysInMonth (or effectiveWorkingDays if mid-month joined)
-  // Standard business convention: Daily salary divisor is total working days in month (or effective working days if joined mid-month)
+  // In working_days mode: divisor is total working days in month (excluding Thursdays & Holidays)
+  // In calendar_days mode: divisor is calendar days in month
   const divisor =
     calculationMode === 'calendar_days'
       ? calendarDays
-      : (effectiveWorkingDays > 0 ? (totalWorkingDaysInMonth > 0 ? totalWorkingDaysInMonth : effectiveWorkingDays) : 1);
+      : (totalWorkingDaysInMonth > 0 ? totalWorkingDaysInMonth : (effectiveWorkingDays > 0 ? effectiveWorkingDays : 1));
 
   const dailySalary = divisor > 0 ? roundCurrency(employee.monthlySalary / divisor) : 0;
 
-  // Calculate deductions
+  // Calculate deductions strictly based on marked leaves/absences
+  // Not Marked / Unrecorded days NEVER cause any deductions!
   const absentDeduction = roundCurrency(dailySalary * absentDays);
   const halfDayDeduction = roundCurrency(dailySalary * 0.5 * halfDays);
   const unpaidLeaveDeduction = roundCurrency(dailySalary * unpaidLeaveDays);
 
-  // If employee joined mid-month in working_days mode, deduct days prior to joining
-  let preJoiningDeduction = 0;
-  if (calculationMode === 'working_days' && totalWorkingDaysInMonth > effectiveWorkingDays && effectiveWorkingDays > 0) {
-    const preJoiningWorkingDays = totalWorkingDaysInMonth - effectiveWorkingDays;
-    preJoiningDeduction = roundCurrency(dailySalary * preJoiningWorkingDays);
-  }
-
   const totalDeductions = roundCurrency(
-    absentDeduction + halfDayDeduction + unpaidLeaveDeduction + preJoiningDeduction
+    absentDeduction + halfDayDeduction + unpaidLeaveDeduction
   );
 
-  const finalSalary = Math.max(0, roundCurrency(employee.monthlySalary - totalDeductions));
+  // Overtime Calculation (Tarika 1: Custom rate if configured, else basic salary ÷ 8 hours)
+  let totalOvertimeHours = 0;
+  attendance.forEach(rec => {
+    if (rec.overtimeHours && rec.overtimeHours > 0) {
+      totalOvertimeHours += Number(rec.overtimeHours);
+    }
+  });
+
+  const hourlyOvertimeRate =
+    employee.overtimeRate && employee.overtimeRate > 0
+      ? employee.overtimeRate
+      : (dailySalary > 0 ? roundCurrency(dailySalary / 8) : 0);
+
+  const overtimeEarnings = roundCurrency(totalOvertimeHours * hourlyOvertimeRate);
+
+  const finalSalary = Math.max(0, roundCurrency(employee.monthlySalary - totalDeductions + overtimeEarnings));
 
   return {
     employeeId: employee.employeeId,
@@ -164,6 +172,9 @@ export function calculateMonthlySalary(input: SalaryCalculationInput): MonthlySa
     weekendDays,
 
     dailySalary,
+    hourlyOvertimeRate,
+    totalOvertimeHours,
+    overtimeEarnings,
     absentDeduction,
     halfDayDeduction,
     unpaidLeaveDeduction,

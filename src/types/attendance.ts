@@ -11,6 +11,7 @@ export interface AttendanceRecord {
   employeeId: string;
   date: string; // YYYY-MM-DD
   status: AttendanceStatus;
+  overtimeHours?: number; // Extra hours worked beyond 8 hrs (e.g. 1.5, 2)
   note?: string;
   updatedAt: string; // ISO string
 }
