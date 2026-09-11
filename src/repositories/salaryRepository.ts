@@ -1,5 +1,6 @@
 import { SalaryService } from '../services/salaryService';
 import { FinalizedSalaryRecord } from '../types';
+import { GoogleDriveSyncService } from '../services/googleDriveSyncService';
 
 export class SalaryRepository {
   static generateId(employeeId: string, year: number, month: number): string {
@@ -31,11 +32,14 @@ export class SalaryRepository {
   }
 
   static async saveFinalizedRecord(record: FinalizedSalaryRecord): Promise<string> {
-    return SalaryService.saveFinalizedRecord(record);
+    const res = await SalaryService.saveFinalizedRecord(record);
+    GoogleDriveSyncService.triggerBackgroundSync();
+    return res;
   }
 
   static async delete(id: string): Promise<void> {
-    return SalaryService.delete(id);
+    await SalaryService.delete(id);
+    GoogleDriveSyncService.triggerBackgroundSync();
   }
 
   static async count(): Promise<number> {

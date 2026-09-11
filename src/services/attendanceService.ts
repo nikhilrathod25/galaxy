@@ -54,6 +54,15 @@ export class AttendanceService {
     return (data || []).map(this.mapFromDb);
   }
 
+  static async getAll(): Promise<AttendanceRecord[]> {
+    const { data, error } = await supabase.from('attendance').select('*');
+    if (error) {
+      console.error('Error fetching all attendance:', error);
+      return [];
+    }
+    return (data || []).map(this.mapFromDb);
+  }
+
   static async getByDateRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
     const { data, error } = await supabase
       .from('attendance')
