@@ -12,6 +12,8 @@ import { Sidebar } from './components/common/Sidebar';
 import { AuthService } from './services/authService';
 import { RealtimeService } from './services/realtimeService';
 
+import { GoogleDriveSyncService } from './services/googleDriveSyncService';
+
 // Pages
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -44,6 +46,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         navigate('/login', { replace: true });
       } else {
         setIsCheckingAuth(false);
+        GoogleDriveSyncService.triggerBackgroundSync();
       }
     };
 

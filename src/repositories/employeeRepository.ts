@@ -1,5 +1,6 @@
 import { EmployeeService } from '../services/employeeService';
 import { Employee, EmployeeStatus } from '../types';
+import { GoogleDriveSyncService } from '../services/googleDriveSyncService';
 
 export class EmployeeRepository {
   static async getAll(status?: EmployeeStatus): Promise<Employee[]> {
@@ -19,15 +20,20 @@ export class EmployeeRepository {
   }
 
   static async create(data: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
-    return EmployeeService.create(data);
+    const res = await EmployeeService.create(data);
+    GoogleDriveSyncService.triggerBackgroundSync();
+    return res;
   }
 
   static async update(id: number, data: Partial<Employee>): Promise<number> {
-    return EmployeeService.update(id, data);
+    const res = await EmployeeService.update(id, data);
+    GoogleDriveSyncService.triggerBackgroundSync();
+    return res;
   }
 
   static async delete(id: number): Promise<void> {
-    return EmployeeService.delete(id);
+    await EmployeeService.delete(id);
+    GoogleDriveSyncService.triggerBackgroundSync();
   }
 
   static async count(): Promise<number> {

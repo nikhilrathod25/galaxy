@@ -62,8 +62,8 @@ export const Navbar: React.FC<NavbarProps> = () => {
   return (
     <>
       <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
-        {/* Left: Brand Logo Icon Only */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Left: Brand Logo Icon Only (Mobile only - hidden on Desktop since sidebar already has logo) */}
+        <div className="lg:hidden flex items-center gap-3 shrink-0">
           {company?.logoUrl ? (
             <img
               src={company.logoUrl}
@@ -77,7 +77,8 @@ export const Navbar: React.FC<NavbarProps> = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right: Action Controls (Always aligned to the right / end) */}
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {/* Live IST Clock */}
           <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-mono font-semibold border border-slate-200/60">
             <Clock className="w-3.5 h-3.5 text-blue-600" />
